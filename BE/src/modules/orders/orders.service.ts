@@ -167,26 +167,38 @@ export class OrdersService {
     return this.saveNewOrder(createOrderDto, staff, OrderStatus.PENDING);
   }
 
-  /** Solo: chủ quán bán & hoàn tất ngay — không qua bếp/phục vụ */
-  async createSoloSale(
-    createOrderDto: CreateOrderDto,
+  /** Solo — hoàn tất đơn từ màn Hóa đơn & doanh thu (PENDING → COMPLETED) */
+  async completeSoloSale(
+    id: string,
     staff: UserDocument,
   ): Promise<OrderDocument> {
     if (staff.role !== Role.ADMIN) {
-      throw new ForbiddenException('Chỉ chủ cửa hàng mới bán qua POS Solo');
+      throw new ForbiddenException('Chỉ chủ cửa hàng mới hoàn tất đơn Solo');
     }
     const solo = await this.isSoloTenant(staff.tenantId);
     if (!solo) {
-      throw new ForbiddenException('Luồng bán Solo chỉ dùng cho cửa hàng gói Solo');
+      throw new ForbiddenException('Chỉ dùng cho cửa hàng gói Solo');
     }
 
-    const order = await this.saveNewOrder(
-      createOrderDto,
-      staff,
-      OrderStatus.COMPLETED,
-    );
-    await this.maybeDeductInventory(order);
-    return order;
+    const order = await this.findById(id);
+    const current = normalizeOrderStatus(order.status);
+
+    if (current === OrderStatus.COMPLETED) {
+      return order;
+    }
+    if (current === OrderStatus.CANCELLED) {
+      throw new BadRequestException('Không thể hoàn tất đơn đã hủy');
+    }
+    if (current !== OrderStatus.PENDING && current !== OrderStatus.PREPARING) {
+      throw new BadRequestException(
+        'Đơn Solo chỉ hoàn tất từ trạng thái chờ xử lý',
+      );
+    }
+
+    order.status = OrderStatus.COMPLETED;
+    const saved = await order.save();
+    await this.maybeDeductInventory(saved);
+    return saved;
   }
 
   private async saveNewOrder(

@@ -39,17 +39,6 @@ export class OrdersController {
     return this.ordersService.create(createOrderDto, user);
   }
 
-  /** Solo POS — tạo đơn đã hoàn tất (không qua bếp/phục vụ) */
-  @Post('solo-sale')
-  @RequireFeature(SaasFeature.POS)
-  @Roles(Role.ADMIN)
-  createSoloSale(
-    @Body() createOrderDto: CreateOrderDto,
-    @CurrentUser() user: UserDocument,
-  ) {
-    return this.ordersService.createSoloSale(createOrderDto, user);
-  }
-
   @Get('reports/today')
   @RequireFeature(SaasFeature.BASIC_REPORTS)
   @Roles(Role.ADMIN, Role.STORE_MANAGER, Role.ACCOUNTING)
@@ -127,5 +116,16 @@ export class OrdersController {
     @Body() dto: UpdateOrderStatusDto,
   ) {
     return this.ordersService.updateStatus(id, dto.status);
+  }
+
+  /** Solo — chốt đơn từ màn doanh thu (PENDING → COMPLETED) */
+  @Patch(':id/solo-complete')
+  @RequireFeature(SaasFeature.POS)
+  @Roles(Role.ADMIN)
+  completeSolo(
+    @Param('id') id: string,
+    @CurrentUser() user: UserDocument,
+  ) {
+    return this.ordersService.completeSoloSale(id, user);
   }
 }

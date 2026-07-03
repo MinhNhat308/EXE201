@@ -59,15 +59,6 @@ export const OrderController = {
     });
   },
 
-  /** Solo — chủ quán bán & hoàn tất một lần (COMPLETED) */
-  createSoloSale(payload: CreateOrderPayload): Promise<Order> {
-    return apiRequest<Order>('/orders/solo-sale', {
-      method: 'POST',
-      auth: true,
-      body: JSON.stringify(payload),
-    });
-  },
-
   getToday(workShift?: WorkShift, activeOnly = false, branchId?: string, skipCache = false): Promise<Order[]> {
     const params = new URLSearchParams();
     if (workShift) params.set('workShift', workShift);
@@ -119,6 +110,14 @@ export const OrderController = {
       method: 'PATCH',
       auth: true,
       body: JSON.stringify({ status }),
+    });
+  },
+
+  /** Solo — hoàn tất đơn từ màn Hóa đơn & doanh thu */
+  completeSoloSale(id: string): Promise<Order> {
+    return apiRequest<Order>(`/orders/${id}/solo-complete`, {
+      method: 'PATCH',
+      auth: true,
     });
   },
 

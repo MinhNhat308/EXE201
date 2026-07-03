@@ -264,9 +264,12 @@ export function CashierView({ solo = false }: { solo?: boolean }) {
         branchId: user.branchId,
       };
 
-      const order = soloMode
-        ? await OrderController.createSoloSale(payload)
-        : await OrderController.create(payload);
+      const order = await OrderController.create(payload);
+
+      if (soloMode) {
+        router.push(`${SOLO_SALES_PATH}?order=${order.id}`);
+        return;
+      }
 
       setConfirmedOrder(order);
       setStep('confirm');
@@ -442,7 +445,7 @@ export function CashierView({ solo = false }: { solo?: boolean }) {
                 disabled={submitting}
                 className="flex-1 rounded-xl bg-emerald-500 py-3 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-60"
               >
-                {submitting ? '...' : soloMode ? 'Hoàn thành đơn' : 'Xác nhận'}
+                {submitting ? '...' : soloMode ? 'Lưu & xem danh sách' : 'Xác nhận'}
               </button>
             </div>
           </div>
