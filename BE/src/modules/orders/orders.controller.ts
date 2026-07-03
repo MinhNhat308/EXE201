@@ -39,6 +39,17 @@ export class OrdersController {
     return this.ordersService.create(createOrderDto, user);
   }
 
+  /** Solo POS — tạo đơn đã hoàn tất (không qua bếp/phục vụ) */
+  @Post('solo-sale')
+  @RequireFeature(SaasFeature.POS)
+  @Roles(Role.ADMIN)
+  createSoloSale(
+    @Body() createOrderDto: CreateOrderDto,
+    @CurrentUser() user: UserDocument,
+  ) {
+    return this.ordersService.createSoloSale(createOrderDto, user);
+  }
+
   @Get('reports/today')
   @RequireFeature(SaasFeature.BASIC_REPORTS)
   @Roles(Role.ADMIN, Role.STORE_MANAGER, Role.ACCOUNTING)

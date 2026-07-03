@@ -25,7 +25,7 @@ import {
 import { formatCurrency } from '@/lib/format';
 import { resolveStaffSession, endStaffSessionRemote } from '@/lib/staff-session-storage';
 import { CartItem, MenuItem, Topping } from '@/models/menu.model';
-import { Order, OrderStatus } from '@/models/order.model';
+import { Order } from '@/models/order.model';
 import { PaymentOption } from '@/views/staff/CheckoutModal';
 import {
   WORK_ROLE_LABELS,
@@ -251,7 +251,7 @@ export function CashierView({ solo = false }: { solo?: boolean }) {
     setError('');
 
     try {
-      const order = await OrderController.create({
+      const payload = {
         items: cartToOrderItems(cart),
         customerName: customerName || undefined,
         customerPhone: customerPhone || undefined,
@@ -262,14 +262,13 @@ export function CashierView({ solo = false }: { solo?: boolean }) {
         subtotal,
         total: subtotal,
         branchId: user.branchId,
-      });
+      };
 
-      if (soloMode) {
-        const completed = await OrderController.updateStatus(order.id, OrderStatus.COMPLETED);
-        setConfirmedOrder(completed);
-      } else {
-        setConfirmedOrder(order);
-      }
+      const order = soloMode
+        ? await OrderController.createSoloSale(payload)
+        : await OrderController.create(payload);
+
+      setConfirmedOrder(order);
       setStep('confirm');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Xác nhận thất bại');

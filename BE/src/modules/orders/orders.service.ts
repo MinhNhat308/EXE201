@@ -13,6 +13,7 @@ import {
   normalizeOrderStatus,
   OrderStatus,
 } from '../../common/enums/order-status.enum';
+import { Role } from '../../common/enums/role.enum';
 import { SubscriptionPlan } from '../../common/enums/subscription-plan.enum';
 import { WorkShift } from '../../common/enums/work-shift.enum';
 import {
@@ -158,9 +159,40 @@ export class OrdersService {
     };
   }
 
+  /** Store/Chain: thu ngân tạo đơn PENDING → bếp → phục vụ giao */
   async create(
     createOrderDto: CreateOrderDto,
     staff: UserDocument,
+  ): Promise<OrderDocument> {
+    return this.saveNewOrder(createOrderDto, staff, OrderStatus.PENDING);
+  }
+
+  /** Solo: chủ quán bán & hoàn tất ngay — không qua bếp/phục vụ */
+  async createSoloSale(
+    createOrderDto: CreateOrderDto,
+    staff: UserDocument,
+  ): Promise<OrderDocument> {
+    if (staff.role !== Role.ADMIN) {
+      throw new ForbiddenException('Chỉ chủ cửa hàng mới bán qua POS Solo');
+    }
+    const solo = await this.isSoloTenant(staff.tenantId);
+    if (!solo) {
+      throw new ForbiddenException('Luồng bán Solo chỉ dùng cho cửa hàng gói Solo');
+    }
+
+    const order = await this.saveNewOrder(
+      createOrderDto,
+      staff,
+      OrderStatus.COMPLETED,
+    );
+    await this.maybeDeductInventory(order);
+    return order;
+  }
+
+  private async saveNewOrder(
+    createOrderDto: CreateOrderDto,
+    staff: UserDocument,
+    status: OrderStatus,
   ): Promise<OrderDocument> {
     const payment = await this.paymentMethodsService.findByCode(
       createOrderDto.paymentMethod,
@@ -169,29 +201,25 @@ export class OrdersService {
       throw new BadRequestException('Phương thức thanh toán không hợp lệ');
     }
 
-    let { orderNumber: _orderNumber, invoiceNumber: _invoiceNumber, dailySequence: _dailySequence } =
+    let { orderNumber: ord, invoiceNumber: inv, dailySequence: seq } =
       await this.generateDailyNumbers();
-    let ord = _orderNumber;
-    let inv = _invoiceNumber;
-    let seq = _dailySequence;
 
-    const tableNumber =
-      createOrderDto.tableNumber?.trim() || ord;
+    const tableNumber = createOrderDto.tableNumber?.trim() || ord;
 
-    const buildOrder = (ordNum: string, invNum: string, seq: number) =>
+    const buildOrder = (ordNum: string, invNum: string, dailySeq: number) =>
       new this.orderModel({
         ...createOrderDto,
         tableNumber,
         orderNumber: ordNum,
         invoiceNumber: invNum,
-        dailySequence: seq,
+        dailySequence: dailySeq,
         staffId: staff._id,
         staffName: staff.fullName,
         branchId:
           createOrderDto.branchId != null
             ? new Types.ObjectId(createOrderDto.branchId)
             : staff.branchId,
-        status: OrderStatus.PENDING,
+        status,
         items: createOrderDto.items.map((item) => ({
           menuItemId: item.menuItemId,
           name: item.name,
@@ -205,7 +233,6 @@ export class OrdersService {
         })),
       });
 
-    // Try saving the order, retrying if orderNumber collides (concurrent requests)
     const maxRetries = 3;
     let attempt = 0;
     let lastError: unknown = null;
@@ -217,21 +244,17 @@ export class OrdersService {
         return await currentOrder.save();
       } catch (err: any) {
         lastError = err;
-        // If duplicate key on orderNumber, regenerate numbers and retry
         const isDupOrderNumber =
           err && err.code === 11000 && err.keyValue && err.keyValue.orderNumber;
         if (!isDupOrderNumber) break;
 
-        // get next sequence value atomically to avoid repeating the same number
         const regenerated = await this.bumpCounter();
-        // update for next attempt
         ord = regenerated.orderNumber;
         inv = regenerated.invoiceNumber;
         seq = regenerated.dailySequence;
       }
     }
 
-    // if we get here, rethrow the last error
     throw lastError;
   }
 
@@ -476,6 +499,7 @@ export class OrdersService {
     return saved;
   }
 
+  /** Store/Chain — phục vụ: READY → COMPLETED (sau khi bếp xong) */
   async updateStatus(id: string, status: OrderStatus): Promise<OrderDocument> {
     const order = await this.findById(id);
     const current = normalizeOrderStatus(order.status);
@@ -489,12 +513,9 @@ export class OrdersService {
         throw new BadRequestException('Không thể hoàn tất đơn đã hủy');
       }
       if (current !== OrderStatus.READY) {
-        const solo = await this.isSoloTenant(order.tenantId);
-        if (!solo) {
-          throw new BadRequestException(
-            'Chỉ giao được đơn ở trạng thái READY (bếp đã xong)',
-          );
-        }
+        throw new BadRequestException(
+          'Chỉ giao được đơn ở trạng thái READY (bếp đã xong)',
+        );
       }
     }
 

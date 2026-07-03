@@ -50,8 +50,18 @@ export const PaymentMethodController = {
 };
 
 export const OrderController = {
+  /** Store/Chain — thu ngân gửi bếp (PENDING) */
   create(payload: CreateOrderPayload): Promise<Order> {
     return apiRequest<Order>('/orders', {
+      method: 'POST',
+      auth: true,
+      body: JSON.stringify(payload),
+    });
+  },
+
+  /** Solo — chủ quán bán & hoàn tất một lần (COMPLETED) */
+  createSoloSale(payload: CreateOrderPayload): Promise<Order> {
+    return apiRequest<Order>('/orders/solo-sale', {
       method: 'POST',
       auth: true,
       body: JSON.stringify(payload),
