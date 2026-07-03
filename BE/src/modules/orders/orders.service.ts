@@ -13,7 +13,13 @@ import {
   normalizeOrderStatus,
   OrderStatus,
 } from '../../common/enums/order-status.enum';
+import { SubscriptionPlan } from '../../common/enums/subscription-plan.enum';
 import { WorkShift } from '../../common/enums/work-shift.enum';
+import {
+  formatDatePrefixInTimezone,
+  getDayRangeInTimezone,
+} from '../../common/utils/day-range';
+import { getTenantId } from '../../common/tenant/tenant-context';
 import { PaymentMethodsService } from '../payment-methods/payment-methods.service';
 import type { TodayReportResponse } from './dto/today-report.dto';
 import { InventoryService } from '../inventory/inventory.service';
@@ -57,11 +63,30 @@ export class OrdersService {
     await this.inventoryService.deductForOrder(order._id.toString());
   }
 
-  private getTodayRange() {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
-    return { start, end };
+  private async resolveStoreTimezone(): Promise<string> {
+    const tenantId = getTenantId();
+    if (!tenantId) return 'Asia/Ho_Chi_Minh';
+    try {
+      const tenant = await this.tenantsService.findById(tenantId);
+      return tenant.settings?.timezone ?? 'Asia/Ho_Chi_Minh';
+    } catch {
+      return 'Asia/Ho_Chi_Minh';
+    }
+  }
+
+  private async getTodayRange() {
+    const timezone = await this.resolveStoreTimezone();
+    return getDayRangeInTimezone(timezone);
+  }
+
+  private async isSoloTenant(tenantId?: Types.ObjectId): Promise<boolean> {
+    if (!tenantId) return false;
+    try {
+      const tenant = await this.tenantsService.findById(tenantId.toString());
+      return tenant.intendedPlan === SubscriptionPlan.SOLO;
+    } catch {
+      return false;
+    }
   }
 
   private async generateDailyNumbers(): Promise<{
@@ -69,18 +94,13 @@ export class OrdersService {
     orderNumber: string;
     dailySequence: number;
   }> {
-    // Use an atomic counter in a separate collection to avoid race conditions
-    const now = new Date();
-    const yy = String(now.getFullYear()).slice(-2);
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    const datePrefix = `${yy}${mm}${dd}`;
+    const timezone = await this.resolveStoreTimezone();
+    const datePrefix = formatDatePrefixInTimezone(timezone);
 
     const countersColl = this.orderModel.db.collection('order_counters');
     const key = `orders:${datePrefix}`;
 
-    // ensure the counter is at least the number of existing orders today
-    const { start, end } = this.getTodayRange();
+    const { start, end } = await this.getTodayRange();
     const existingCount = await this.orderModel.countDocuments({
       createdAt: { $gte: start, $lt: end },
     });
@@ -112,16 +132,13 @@ export class OrdersService {
     };
   }
 
-  private formatDatePrefix(now = new Date()) {
-    const yy = String(now.getFullYear()).slice(-2);
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(now.getDate()).padStart(2, '0');
-    return `${yy}${mm}${dd}`;
+  private async formatDatePrefix(): Promise<string> {
+    const timezone = await this.resolveStoreTimezone();
+    return formatDatePrefixInTimezone(timezone);
   }
 
   private async bumpCounter(): Promise<{ invoiceNumber: string; orderNumber: string; dailySequence: number }> {
-    const now = new Date();
-    const datePrefix = this.formatDatePrefix(now);
+    const datePrefix = await this.formatDatePrefix();
     const countersColl = this.orderModel.db.collection('order_counters');
     const key = `orders:${datePrefix}`;
 
@@ -223,7 +240,7 @@ export class OrdersService {
     activeOnly = false,
     branchId?: string,
   ): Promise<OrderDocument[]> {
-    const { start, end } = this.getTodayRange();
+    const { start, end } = await this.getTodayRange();
     const filter: Record<string, unknown> = {
       createdAt: { $gte: start, $lt: end },
     };
@@ -464,10 +481,21 @@ export class OrdersService {
     const current = normalizeOrderStatus(order.status);
     const next = normalizeOrderStatus(status);
 
-    if (next === OrderStatus.COMPLETED && current !== OrderStatus.READY) {
-      throw new BadRequestException(
-        'Chỉ giao được đơn ở trạng thái READY (bếp đã xong)',
-      );
+    if (next === OrderStatus.COMPLETED) {
+      if (current === OrderStatus.COMPLETED) {
+        return order;
+      }
+      if (current === OrderStatus.CANCELLED) {
+        throw new BadRequestException('Không thể hoàn tất đơn đã hủy');
+      }
+      if (current !== OrderStatus.READY) {
+        const solo = await this.isSoloTenant(order.tenantId);
+        if (!solo) {
+          throw new BadRequestException(
+            'Chỉ giao được đơn ở trạng thái READY (bếp đã xong)',
+          );
+        }
+      }
     }
 
     order.status = next;

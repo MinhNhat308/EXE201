@@ -14,13 +14,14 @@ import { TenantInfo } from '@/models/tenant.model';
 export function SoloSalesView() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [selected, setSelected] = useState<Order | null>(null);
   const tenant = getStoredTenant<TenantInfo>();
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (skipCache = false) => {
     setLoading(true);
     try {
-      const data = await OrderController.getToday();
+      const data = await OrderController.getToday(undefined, false, undefined, skipCache);
       const completed = data
         .filter((o) => normalizeStatus(o.status) === OrderStatus.COMPLETED)
         .sort(
@@ -28,15 +29,23 @@ export function SoloSalesView() {
             new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime(),
         );
       setOrders(completed);
-    } catch {
+      setLoadError('');
+    } catch (err) {
       setOrders([]);
+      setLoadError(err instanceof Error ? err.message : 'Không tải được danh sách đơn');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void load();
+    void load(true);
+  }, [load]);
+
+  useEffect(() => {
+    const onFocus = () => void load(true);
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
   }, [load]);
 
   const stats = useMemo(() => {
@@ -94,6 +103,11 @@ export function SoloSalesView() {
 
         <div className="mt-6 print:hidden">
           <h2 className="text-sm font-semibold text-stone-800">Hóa đơn hôm nay</h2>
+          {loadError && (
+            <p className="mt-3 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600 ring-1 ring-red-100">
+              {loadError}
+            </p>
+          )}
           {loading ? (
             <p className="mt-4 text-sm text-stone-500">Đang tải...</p>
           ) : orders.length === 0 ? (

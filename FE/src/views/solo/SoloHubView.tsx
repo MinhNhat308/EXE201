@@ -27,9 +27,9 @@ export function SoloHubView() {
   const [stats, setStats] = useState<TodayStats>({ orderCount: 0, revenue: 0 });
   const [loading, setLoading] = useState(true);
 
-  const loadStats = useCallback(async () => {
+  const loadStats = useCallback(async (skipCache = false) => {
     try {
-      const orders = await OrderController.getToday();
+      const orders = await OrderController.getToday(undefined, false, undefined, skipCache);
       const completed = orders.filter(
         (o) => normalizeStatus(o.status) === OrderStatus.COMPLETED,
       );
@@ -56,7 +56,7 @@ export function SoloHubView() {
       return;
     }
     setTenant(t);
-    void loadStats();
+    void loadStats(true);
   }, [router, loadStats]);
 
   const storeName = tenant?.storeName ?? 'cửa hàng';
