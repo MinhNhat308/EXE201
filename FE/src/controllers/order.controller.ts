@@ -113,14 +113,6 @@ export const OrderController = {
     });
   },
 
-  /** Solo — hoàn tất đơn từ màn Hóa đơn & doanh thu */
-  completeSoloSale(id: string): Promise<Order> {
-    return apiRequest<Order>(`/orders/${id}/solo-complete`, {
-      method: 'PATCH',
-      auth: true,
-    });
-  },
-
   getTodayReport(workShift?: WorkShift) {
     const q = workShift ? `?workShift=${workShift}` : '';
     return apiRequest<TodayReport>(`/orders/reports/today${q}`, {

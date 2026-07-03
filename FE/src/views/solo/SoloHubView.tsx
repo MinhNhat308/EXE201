@@ -30,12 +30,12 @@ export function SoloHubView() {
   const loadStats = useCallback(async (skipCache = false) => {
     try {
       const orders = await OrderController.getToday(undefined, false, undefined, skipCache);
-      const completed = orders.filter(
-        (o) => normalizeStatus(o.status) === OrderStatus.COMPLETED,
+      const sold = orders.filter(
+        (o) => normalizeStatus(o.status) !== OrderStatus.CANCELLED,
       );
       setStats({
-        orderCount: completed.length,
-        revenue: completed.reduce((s, o) => s + (o.total ?? 0), 0),
+        orderCount: sold.length,
+        revenue: sold.reduce((s, o) => s + (o.total ?? 0), 0),
       });
     } catch {
       /* ignore */

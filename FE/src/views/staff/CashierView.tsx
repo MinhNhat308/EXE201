@@ -445,7 +445,7 @@ export function CashierView({ solo = false }: { solo?: boolean }) {
                 disabled={submitting}
                 className="flex-1 rounded-xl bg-emerald-500 py-3 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-60"
               >
-                {submitting ? '...' : soloMode ? 'Lưu & xem danh sách' : 'Xác nhận'}
+                {submitting ? '...' : soloMode ? 'Lưu hóa đơn' : 'Xác nhận'}
               </button>
             </div>
           </div>

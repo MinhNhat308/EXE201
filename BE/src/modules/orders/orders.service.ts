@@ -13,7 +13,6 @@ import {
   normalizeOrderStatus,
   OrderStatus,
 } from '../../common/enums/order-status.enum';
-import { Role } from '../../common/enums/role.enum';
 import { SubscriptionPlan } from '../../common/enums/subscription-plan.enum';
 import { WorkShift } from '../../common/enums/work-shift.enum';
 import {
@@ -159,46 +158,18 @@ export class OrdersService {
     };
   }
 
-  /** Store/Chain: thu ngân tạo đơn PENDING → bếp → phục vụ giao */
+  /** Solo: lưu hóa đơn = COMPLETED + doanh thu. Store/Chain: PENDING → bếp. */
   async create(
     createOrderDto: CreateOrderDto,
     staff: UserDocument,
   ): Promise<OrderDocument> {
-    return this.saveNewOrder(createOrderDto, staff, OrderStatus.PENDING);
-  }
-
-  /** Solo — hoàn tất đơn từ màn Hóa đơn & doanh thu (PENDING → COMPLETED) */
-  async completeSoloSale(
-    id: string,
-    staff: UserDocument,
-  ): Promise<OrderDocument> {
-    if (staff.role !== Role.ADMIN) {
-      throw new ForbiddenException('Chỉ chủ cửa hàng mới hoàn tất đơn Solo');
-    }
     const solo = await this.isSoloTenant(staff.tenantId);
-    if (!solo) {
-      throw new ForbiddenException('Chỉ dùng cho cửa hàng gói Solo');
+    const status = solo ? OrderStatus.COMPLETED : OrderStatus.PENDING;
+    const order = await this.saveNewOrder(createOrderDto, staff, status);
+    if (solo) {
+      await this.maybeDeductInventory(order);
     }
-
-    const order = await this.findById(id);
-    const current = normalizeOrderStatus(order.status);
-
-    if (current === OrderStatus.COMPLETED) {
-      return order;
-    }
-    if (current === OrderStatus.CANCELLED) {
-      throw new BadRequestException('Không thể hoàn tất đơn đã hủy');
-    }
-    if (current !== OrderStatus.PENDING && current !== OrderStatus.PREPARING) {
-      throw new BadRequestException(
-        'Đơn Solo chỉ hoàn tất từ trạng thái chờ xử lý',
-      );
-    }
-
-    order.status = OrderStatus.COMPLETED;
-    const saved = await order.save();
-    await this.maybeDeductInventory(saved);
-    return saved;
+    return order;
   }
 
   private async saveNewOrder(

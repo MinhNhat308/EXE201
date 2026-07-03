@@ -117,15 +117,4 @@ export class OrdersController {
   ) {
     return this.ordersService.updateStatus(id, dto.status);
   }
-
-  /** Solo — chốt đơn từ màn doanh thu (PENDING → COMPLETED) */
-  @Patch(':id/solo-complete')
-  @RequireFeature(SaasFeature.POS)
-  @Roles(Role.ADMIN)
-  completeSolo(
-    @Param('id') id: string,
-    @CurrentUser() user: UserDocument,
-  ) {
-    return this.ordersService.completeSoloSale(id, user);
-  }
 }
