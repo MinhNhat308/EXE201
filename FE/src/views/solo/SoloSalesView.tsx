@@ -7,6 +7,8 @@ import { BRAND } from '@/lib/brand';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { SOLO_HUB_PATH } from '@/lib/workspace-routes';
 import { normalizeStatus, Order, OrderStatus } from '@/models/order.model';
+import { CancelOrderModal } from '@/views/orders/CancelOrderModal';
+import { EditOrderModal } from '@/views/orders/EditOrderModal';
 import { InvoicePreview } from '@/views/staff/InvoicePreview';
 import { SoloShellLayout } from './SoloShellLayout';
 import { getStoredTenant } from '@/lib/auth-storage';
@@ -25,6 +27,8 @@ export function SoloSalesView() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [selected, setSelected] = useState<Order | null>(null);
+  const [editOpen, setEditOpen] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
   const tenant = getStoredTenant<TenantInfo>();
 
   const load = useCallback(async (skipCache = false) => {
@@ -86,6 +90,31 @@ export function SoloSalesView() {
   }, [orders]);
 
   const handlePrint = () => window.print();
+
+  const handleSaved = async () => {
+    if (!selected) return;
+    try {
+      const updated = await OrderController.getById(selected.id);
+      setSelected(updated);
+    } catch {
+      setSelected(null);
+    }
+    setEditOpen(false);
+    await load(true);
+  };
+
+  const handleCancel = async (reason: string) => {
+    if (!selected) return;
+    await OrderController.cancel(selected.id, reason);
+    setSelected(null);
+    setCancelOpen(false);
+    await load(true);
+  };
+
+  const canModifySelected =
+    selected != null && normalizeStatus(selected.status) !== OrderStatus.CANCELLED;
+  const canCancelSelected =
+    canModifySelected && selected?.paymentMethod !== 'BANK_TRANSFER';
 
   return (
     <SoloShellLayout title="Hóa đơn & doanh thu" backHref={SOLO_HUB_PATH}>
@@ -159,13 +188,31 @@ export function SoloSalesView() {
 
         {selected && (
           <div className="mt-6 space-y-4 print:mt-0">
-            <div className="flex gap-2 print:hidden">
+            <div className="flex flex-wrap gap-2 print:hidden">
+              {canModifySelected && (
+                <button
+                  type="button"
+                  onClick={() => setEditOpen(true)}
+                  className="flex-1 rounded-xl border border-amber-300 bg-amber-50 py-3 text-sm font-semibold text-amber-900 min-w-[120px]"
+                >
+                  Sửa hóa đơn
+                </button>
+              )}
+              {canCancelSelected && (
+                <button
+                  type="button"
+                  onClick={() => setCancelOpen(true)}
+                  className="flex-1 rounded-xl border border-red-200 bg-red-50 py-3 text-sm font-semibold text-red-700 min-w-[120px]"
+                >
+                  Hủy hóa đơn
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handlePrint}
-                className={`flex-1 rounded-xl py-3 text-sm font-semibold ${BRAND.primarySoft}`}
+                className={`flex-1 rounded-xl py-3 text-sm font-semibold ${BRAND.primarySoft} min-w-[120px]`}
               >
-                In lại hóa đơn
+                In lại
               </button>
               <button
                 type="button"
@@ -175,6 +222,11 @@ export function SoloSalesView() {
                 Đóng
               </button>
             </div>
+            {selected.paymentMethod === 'BANK_TRANSFER' && canModifySelected && (
+              <p className="text-xs text-stone-500 print:hidden">
+                Hóa đơn chuyển khoản không thể hủy — chỉ sửa thông tin nếu cần.
+              </p>
+            )}
             <InvoicePreview
               printable
               storeName={tenant?.storeName}
@@ -194,6 +246,21 @@ export function SoloSalesView() {
           </div>
         )}
       </main>
+
+      <EditOrderModal
+        order={selected}
+        open={editOpen}
+        soloMode
+        onClose={() => setEditOpen(false)}
+        onSaved={handleSaved}
+      />
+      <CancelOrderModal
+        order={selected}
+        open={cancelOpen}
+        soloMode
+        onClose={() => setCancelOpen(false)}
+        onConfirm={handleCancel}
+      />
     </SoloShellLayout>
   );
 }

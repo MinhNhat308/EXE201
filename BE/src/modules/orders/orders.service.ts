@@ -400,17 +400,29 @@ export class OrdersService {
     return this.findToday(workShift, true);
   }
 
+  private async assertCanModifyOrder(order: OrderDocument): Promise<void> {
+    if (isPendingStatus(order.status)) {
+      return;
+    }
+    const current = normalizeOrderStatus(order.status);
+    if (current === OrderStatus.CANCELLED) {
+      throw new ForbiddenException('Đơn đã hủy, không thể thay đổi');
+    }
+    const solo = await this.isSoloTenant(order.tenantId);
+    if (solo && current === OrderStatus.COMPLETED) {
+      return;
+    }
+    throw new ForbiddenException(
+      'Chỉ sửa/hủy được đơn chưa gửi bếp (Store) hoặc hóa đơn Solo trong ngày',
+    );
+  }
+
   async updateByCashier(
     id: string,
     dto: UpdateOrderDto,
   ): Promise<OrderDocument> {
     const order = await this.findById(id);
-
-    if (!isPendingStatus(order.status)) {
-      throw new ForbiddenException(
-        'Chỉ sửa được đơn ở trạng thái "Chưa thực hiện"',
-      );
-    }
+    await this.assertCanModifyOrder(order);
 
     if (dto.items) {
       order.items = dto.items.map((item) => ({
@@ -438,12 +450,7 @@ export class OrdersService {
 
   async cancel(id: string, dto: CancelOrderDto): Promise<OrderDocument> {
     const order = await this.findById(id);
-
-    if (!isPendingStatus(order.status)) {
-      throw new ForbiddenException(
-        'Chỉ hủy được đơn ở trạng thái "Chưa thực hiện"',
-      );
-    }
+    await this.assertCanModifyOrder(order);
 
     if (order.paymentMethod === 'BANK_TRANSFER') {
       throw new BadRequestException(

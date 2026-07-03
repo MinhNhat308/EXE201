@@ -22,6 +22,7 @@ interface EditOrderModalProps {
   open: boolean;
   onClose: () => void;
   onSaved: () => void;
+  soloMode?: boolean;
 }
 
 function lineToMenuStub(item: OrderLineItem): MenuItem {
@@ -40,6 +41,7 @@ export function EditOrderModal({
   open,
   onClose,
   onSaved,
+  soloMode = false,
 }: EditOrderModalProps) {
   const [items, setItems] = useState<OrderLineItem[]>([]);
   const [customerName, setCustomerName] = useState('');
@@ -137,8 +139,14 @@ export function EditOrderModal({
     <>
       <Modal open={open} onClose={onClose} className="max-w-lg">
         <form onSubmit={handleSubmit} className="max-h-[90vh] overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
-          <h2 className="text-lg font-bold">Sửa đơn #{order?.orderNumber}</h2>
-          <p className="text-xs text-stone-500">Chỉ sửa được khi bếp chưa bắt đầu làm</p>
+          <h2 className="text-lg font-bold">
+            {soloMode ? 'Sửa hóa đơn' : 'Sửa đơn'} #{order?.invoiceNumber ?? order?.orderNumber}
+          </h2>
+          <p className="text-xs text-stone-500">
+            {soloMode
+              ? 'Chỉnh món, số lượng hoặc thông tin trên hóa đơn đã lưu'
+              : 'Chỉ sửa được khi bếp chưa bắt đầu làm'}
+          </p>
 
           <div className="mt-4 space-y-2">
             {items.map((item, idx) => (

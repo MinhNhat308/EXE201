@@ -9,6 +9,8 @@ interface CancelOrderModalProps {
   open: boolean;
   onClose: () => void;
   onConfirm: (reason: string) => Promise<void>;
+  /** Solo: hóa đơn đã lưu vẫn hủy được (trừ CK) */
+  soloMode?: boolean;
 }
 
 export function CancelOrderModal({
@@ -16,6 +18,7 @@ export function CancelOrderModal({
   open,
   onClose,
   onConfirm,
+  soloMode = false,
 }: CancelOrderModalProps) {
   const [reason, setReason] = useState('');
   const [loading, setLoading] = useState(false);
@@ -44,7 +47,9 @@ export function CancelOrderModal({
   return (
     <Modal open={open} onClose={onClose} className="max-w-md">
       <div className="rounded-2xl bg-white p-6 shadow-xl">
-        <h2 className="text-lg font-bold text-red-700">Hủy đơn #{order?.orderNumber}</h2>
+        <h2 className="text-lg font-bold text-red-700">
+          {soloMode ? 'Hủy hóa đơn' : 'Hủy đơn'} #{order?.invoiceNumber ?? order?.orderNumber}
+        </h2>
 
         {isBankTransfer ? (
           <p className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -54,7 +59,9 @@ export function CancelOrderModal({
         ) : (
           <>
             <p className="mt-2 text-sm text-stone-500">
-              Chỉ hủy được khi đơn còn trạng thái &quot;Chưa thực hiện&quot;.
+              {soloMode
+                ? 'Hóa đơn sẽ bị hủy và không còn tính vào doanh thu hôm nay.'
+                : 'Chỉ hủy được khi đơn còn trạng thái "Chưa thực hiện".'}
             </p>
             <textarea
               value={reason}
