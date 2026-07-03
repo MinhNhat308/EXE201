@@ -32,6 +32,10 @@ export class Ingredient {
   @Prop({ trim: true })
   sku?: string;
 
+  /** Số ngày hạn dùng mặc định (tính từ ngày nhập nếu không nhập HSD trên phiếu NCC) */
+  @Prop({ min: 0 })
+  shelfLifeDays?: number;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -50,6 +54,7 @@ IngredientSchema.set('toJSON', {
     currentStock: ret.currentStock,
     minStock: ret.minStock,
     sku: ret.sku,
+    shelfLifeDays: ret.shelfLifeDays,
     createdAt: ret.createdAt,
     updatedAt: ret.updatedAt,
   }),

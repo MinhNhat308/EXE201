@@ -1,0 +1,35 @@
+# Render Blueprint — BOBAPOS Backend (NestJS)
+# Dashboard: New > Blueprint > Connect repo EXE201
+services:
+  - type: web
+    name: bobapos-api
+    runtime: node
+    region: singapore
+    plan: free
+    rootDir: BE
+    buildCommand: npm install && npm run build
+    startCommand: npm run start:prod
+    healthCheckPath: /api
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: MOMO_ENABLED
+        value: false
+      - key: SAAS_BANK_NAME
+        value: Techcombank
+      - key: SAAS_BANK_ACCOUNT
+        value: "9528677537"
+      - key: SAAS_BANK_HOLDER
+        value: NGUYEN HOANG MINH NHAT
+      - key: SAAS_BANK_QR_URL
+        value: /billing/qr-bank.jpg
+      - key: SAAS_BANK_TRANSFER_PREFIX
+        value: BOBAPOS
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        sync: false

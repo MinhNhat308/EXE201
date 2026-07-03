@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { InventoryController } from '@/controllers/inventory.controller';
+import { useActiveBranch } from '@/lib/use-active-branch';
 import {
   STOCK_REQUEST_STATUS_LABELS,
   STOCK_REQUEST_TYPE_LABELS,
@@ -19,6 +20,7 @@ const STATUS_STYLES: Record<StockRequestStatus, string> = {
 };
 
 export function StockRequestsPanel({ theme = 'accounting' }: { theme?: InventoryTheme }) {
+  const { branchId, version } = useActiveBranch();
   const [requests, setRequests] = useState<StockTransferRequest[]>([]);
   const [filter, setFilter] = useState<StockRequestStatus | 'ALL'>(
     StockRequestStatus.PENDING,
@@ -31,10 +33,11 @@ export function StockRequestsPanel({ theme = 'accounting' }: { theme?: Inventory
 
   const load = useCallback(async () => {
     const data = await InventoryController.getStockRequests(
-      filter === 'ALL' ? undefined : { status: filter },
+      filter === 'ALL' ? { branchId } : { status: filter, branchId },
+      true,
     );
     setRequests(data);
-  }, [filter]);
+  }, [filter, branchId, version]);
 
   useEffect(() => {
     load();

@@ -18,6 +18,13 @@ const ROUTE_FEATURES: { prefix: string; feature: SaasFeature }[] = [
   { prefix: '/dashboard/admin/payments', feature: SaasFeature.PAYMENTS },
   { prefix: '/dashboard/admin/toppings', feature: SaasFeature.MENU },
   { prefix: '/dashboard/admin/menu', feature: SaasFeature.MENU },
+  { prefix: '/dashboard/admin/reports', feature: SaasFeature.BASIC_REPORTS },
+  { prefix: '/dashboard/admin/branches', feature: SaasFeature.MULTI_BRANCH },
+  { prefix: '/dashboard/admin/chain-reports', feature: SaasFeature.MULTI_BRANCH },
+  { prefix: '/dashboard/manager/reports', feature: SaasFeature.BASIC_REPORTS },
+  { prefix: '/dashboard/accounting/reports', feature: SaasFeature.BASIC_REPORTS },
+  { prefix: '/dashboard/shifts', feature: SaasFeature.SHIFT_MGMT },
+  { prefix: '/dashboard/check-in', feature: SaasFeature.SHIFT_MGMT },
   { prefix: '/dashboard/staff/setup', feature: SaasFeature.SHIFT_MGMT },
   { prefix: '/dashboard/staff', feature: SaasFeature.POS },
 ];

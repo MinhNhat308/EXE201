@@ -1,8 +1,5 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { InventoryController } from '@/controllers/inventory.controller';
-import { StockItem } from '@/models/inventory.model';
 import { AdminLayout } from './AdminLayout';
 import { WarehouseStockPanel } from '@/views/shared/WarehouseStockPanel';
 

@@ -39,15 +39,30 @@ export class OrdersController {
     return this.ordersService.create(createOrderDto, user);
   }
 
+  @Get('reports/today')
+  @RequireFeature(SaasFeature.BASIC_REPORTS)
+  @Roles(Role.ADMIN, Role.STORE_MANAGER, Role.ACCOUNTING)
+  todayReport(@Query('workShift') workShift?: WorkShift) {
+    return this.ordersService.getTodayReport(workShift);
+  }
+
   @Get('today')
-  @Roles(Role.STAFF, Role.KITCHEN, Role.STORE_MANAGER, Role.ADMIN)
+  @Roles(
+    Role.STAFF,
+    Role.KITCHEN,
+    Role.STORE_MANAGER,
+    Role.ACCOUNTING,
+    Role.ADMIN,
+  )
   findToday(
     @Query('workShift') workShift?: WorkShift,
     @Query('activeOnly') activeOnly?: string,
+    @Query('branchId') branchId?: string,
   ) {
     return this.ordersService.findToday(
       workShift,
       activeOnly === 'true',
+      branchId,
     );
   }
 
@@ -61,7 +76,13 @@ export class OrdersController {
   }
 
   @Get(':id')
-  @Roles(Role.STAFF, Role.KITCHEN, Role.STORE_MANAGER, Role.ADMIN)
+  @Roles(
+    Role.STAFF,
+    Role.KITCHEN,
+    Role.STORE_MANAGER,
+    Role.ACCOUNTING,
+    Role.ADMIN,
+  )
   findOne(@Param('id') id: string) {
     return this.ordersService.findById(id);
   }

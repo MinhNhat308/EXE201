@@ -66,7 +66,13 @@ export class TenantMigrationService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    await this.ensureDefaultTenantAndBackfill();
+    try {
+      await this.ensureDefaultTenantAndBackfill();
+    } catch (err) {
+      this.logger.warn(
+        `Migration/backfill bỏ qua lỗi index: ${(err as Error).message}`,
+      );
+    }
   }
 
   /** Xóa index single-field cũ (trước multi-tenant) để tránh E11000 khi seed tenant mới */
@@ -77,6 +83,7 @@ export class TenantMigrationService implements OnModuleInit {
       { model: this.paymentModel, names: ['code_1'] },
       { model: this.orderModel, names: ['orderNumber_1', 'invoiceNumber_1'] },
       { model: this.stockRequestModel, names: ['requestNumber_1'] },
+      { model: this.warehouseStockModel, names: ['warehouseId_1_ingredientId_1'] },
     ];
 
     for (const { model, names } of drops) {
@@ -129,7 +136,13 @@ export class TenantMigrationService implements OnModuleInit {
     } catch {
       /* index chưa tồn tại hoặc đã đúng kiểu */
     }
-    await this.userModel.syncIndexes();
+    try {
+      await this.userModel.syncIndexes();
+    } catch (err) {
+      this.logger.warn(
+        `syncIndexes users bỏ qua: ${(err as Error).message}`,
+      );
+    }
 
     await this.userModel
       .updateMany(

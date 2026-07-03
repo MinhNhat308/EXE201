@@ -7,11 +7,14 @@ export interface PaymentOption {
   code: string;
   label: string;
   description?: string;
+  qrImageUrl?: string;
+  bankAccountInfo?: string;
 }
 
 interface CheckoutModalProps {
   open: boolean;
   onClose: () => void;
+  soloMode?: boolean;
   subtotal: number;
   customerName: string;
   customerPhone: string;
@@ -19,6 +22,7 @@ interface CheckoutModalProps {
   note: string;
   paymentMethod: string;
   paymentOptions: PaymentOption[];
+  bankTransferDetails?: { qrImageUrl?: string; bankAccountInfo?: string };
   onCustomerNameChange: (v: string) => void;
   onCustomerPhoneChange: (v: string) => void;
   onTableNumberChange: (v: string) => void;
@@ -30,6 +34,7 @@ interface CheckoutModalProps {
 export function CheckoutModal({
   open,
   onClose,
+  soloMode = false,
   subtotal,
   customerName,
   customerPhone,
@@ -37,6 +42,7 @@ export function CheckoutModal({
   note,
   paymentMethod,
   paymentOptions,
+  bankTransferDetails,
   onCustomerNameChange,
   onCustomerPhoneChange,
   onTableNumberChange,
@@ -50,7 +56,9 @@ export function CheckoutModal({
         <div className="flex items-center justify-between border-b border-stone-100 px-5 py-4">
           <div>
             <h2 className="text-lg font-bold text-stone-900">Thanh toán</h2>
-            <p className="text-sm text-stone-500">Thông tin khách & phương thức</p>
+            <p className="text-sm text-stone-500">
+              {soloMode ? 'Chọn hình thức thanh toán' : 'Thông tin khách & phương thức'}
+            </p>
           </div>
           <button
             type="button"
@@ -61,7 +69,8 @@ export function CheckoutModal({
           </button>
         </div>
 
-        <div className="grid md:grid-cols-2">
+        <div className={soloMode ? '' : 'grid md:grid-cols-2'}>
+          {!soloMode && (
           <div className="space-y-3 border-b border-stone-100 p-5 md:border-b-0 md:border-r">
             <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">
               Khách hàng
@@ -92,8 +101,9 @@ export function CheckoutModal({
               placeholder="Ghi chú đơn"
             />
           </div>
+          )}
 
-          <div className="flex flex-col bg-gradient-to-b from-stone-50 to-white p-5">
+          <div className={`flex flex-col bg-gradient-to-b from-stone-50 to-white p-5 ${soloMode ? 'min-h-[280px]' : ''}`}>
             <p className="text-xs font-semibold uppercase tracking-wider text-stone-400">
               Phương thức
             </p>
@@ -105,7 +115,7 @@ export function CheckoutModal({
                   onClick={() => onPaymentMethodChange(method.code)}
                   className={`flex w-full items-center gap-3 rounded-xl border-2 p-3.5 text-left transition ${
                     paymentMethod === method.code
-                      ? 'border-amber-500 bg-white shadow-sm'
+                      ? 'border-[#2F80ED] bg-white shadow-sm'
                       : 'border-transparent bg-white/80 hover:border-stone-200'
                   }`}
                 >
@@ -121,6 +131,34 @@ export function CheckoutModal({
                 </button>
               ))}
             </div>
+
+            {paymentMethod === 'BANK_TRANSFER' && (() => {
+              const bank = bankTransferDetails;
+              if (!bank?.qrImageUrl && !bank?.bankAccountInfo) {
+                return (
+                  <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    Chưa có QR — thêm trong Cài đặt → Quán &amp; TT.
+                  </p>
+                );
+              }
+              return (
+                <div className="mt-3 rounded-xl border border-stone-200 bg-white p-3 text-center">
+                  <p className="text-xs font-semibold text-stone-500">Quét mã chuyển khoản</p>
+                  {bank.qrImageUrl && (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={bank.qrImageUrl}
+                      alt="QR chuyển khoản"
+                      className="mx-auto mt-2 max-h-44 rounded-lg border border-stone-100 object-contain"
+                    />
+                  )}
+                  {bank.bankAccountInfo && (
+                    <p className="mt-2 text-xs text-stone-600">{bank.bankAccountInfo}</p>
+                  )}
+                </div>
+              );
+            })()}
+
             <div className="mt-auto pt-5">
               <div className="rounded-xl bg-stone-900 px-4 py-3 text-white">
                 <p className="text-xs text-stone-400">Tổng thanh toán</p>
@@ -146,7 +184,7 @@ export function CheckoutModal({
             disabled={!paymentMethod}
             className="flex-1 rounded-xl bg-gradient-to-r from-amber-500 to-orange-500 py-2.5 text-sm font-bold text-white shadow-lg disabled:opacity-40"
           >
-            Xem hóa đơn & xác nhận →
+            {soloMode ? 'Tiếp tục → Xem hóa đơn' : 'Xem hóa đơn & xác nhận →'}
           </button>
         </div>
       </div>

@@ -4,7 +4,10 @@ import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { usePolling } from '@/lib/use-polling';
 import { BRAND } from '@/lib/brand';
+import { formatCurrency } from '@/lib/format';
 import { InventoryController } from '@/controllers/inventory.controller';
+import { useActiveBranch } from '@/lib/use-active-branch';
+import { useBranchWarehouses } from '@/lib/use-branch-warehouses';
 import { WarehouseOverview } from '@/models/inventory.model';
 import { StockRequestStatus } from '@/models/stock-request.model';
 import {
@@ -19,6 +22,12 @@ import { OperationsDashboardPanel } from '@/views/shared/OperationsDashboardPane
 import { AccountingLayout } from './AccountingLayout';
 
 const MODULES = [
+  {
+    href: '/dashboard/accounting/reports',
+    title: 'Trung tâm báo cáo',
+    desc: 'Doanh thu, HĐĐT, kho — xem & in báo cáo',
+    icon: '📊',
+  },
   {
     href: '/dashboard/accounting/supplier',
     title: 'Nhập NCC → Kho tổng',
@@ -52,14 +61,24 @@ const MODULES = [
 ];
 
 export function AccountingHomeView() {
+  const { branchId, version } = useActiveBranch();
+  const { centralId } = useBranchWarehouses();
   const [overview, setOverview] = useState<WarehouseOverview | null>(null);
   const [warehouseId, setWarehouseId] = useState('');
   const [loading, setLoading] = useState(true);
   const [pendingCount, setPendingCount] = useState(0);
 
+  useEffect(() => {
+    if (centralId) setWarehouseId(centralId);
+  }, [centralId, branchId, version]);
+
   const loadOverview = useCallback(async () => {
     try {
-      const data = await InventoryController.getOverview(warehouseId || undefined);
+      const data = await InventoryController.getOverview(
+        warehouseId || undefined,
+        branchId,
+        true,
+      );
       setOverview(data);
       if (!warehouseId && data.warehouseId) setWarehouseId(data.warehouseId);
     } catch {
@@ -67,18 +86,22 @@ export function AccountingHomeView() {
     } finally {
       setLoading(false);
     }
-  }, [warehouseId]);
+  }, [warehouseId, branchId, version]);
 
   const loadPending = useCallback(async () => {
     try {
-      const pending = await InventoryController.getStockRequests({
-        status: StockRequestStatus.PENDING,
-      });
+      const pending = await InventoryController.getStockRequests(
+        {
+          status: StockRequestStatus.PENDING,
+          branchId,
+        },
+        true,
+      );
       setPendingCount(pending.length);
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [branchId, version]);
 
   useEffect(() => {
     setLoading(true);
@@ -102,6 +125,26 @@ export function AccountingHomeView() {
         />
 
         <WorkflowSteps theme="accounting" />
+
+        <div className="flex flex-col gap-3 rounded-2xl border border-[#2F80ED]/25 bg-gradient-to-r from-blue-50 to-white p-5 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-wider text-[#2F80ED]">
+              Báo cáo quản trị
+            </p>
+            <p className="mt-1 text-lg font-bold text-stone-900">
+              Xem báo cáo doanh thu, thuế & kho
+            </p>
+            <p className="mt-0.5 text-sm text-stone-500">
+              Mẫu báo cáo chuẩn — in PDF hoặc xuất Excel
+            </p>
+          </div>
+          <Link
+            href="/dashboard/accounting/reports"
+            className={`shrink-0 rounded-xl px-6 py-3 text-center text-sm font-semibold text-white shadow-md ${BRAND.primary}`}
+          >
+            👁 Xem báo cáo →
+          </Link>
+        </div>
 
         <OperationsDashboardPanel
           warehouseHref="/dashboard/warehouse/returns"
@@ -150,24 +193,37 @@ export function AccountingHomeView() {
         {loading && !overview ? (
           <LoadingGrid />
         ) : overview ? (
-          <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            <StatCard
-              label="Tồn thấp (kho đang chọn)"
-              value={overview.lowCount}
-              icon="⚠️"
-              tone="warning"
-            />
-            <StatCard label="Chất lỏng sắp hết" value={overview.liquidLow} icon="💧" tone="info" />
-            <StatCard
-              label="Xuất bếp hôm nay"
-              value={overview.todayUsageLines}
-              icon="👨‍🍳"
-              hint="KHO1 khi bếp READY"
-            />
-            <StatCard label="Phiếu NCC hôm nay" value={overview.todayReceiptCount} icon="📥" />
-          </div>
+          <>
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
+              <StatCard
+                label="Tồn thấp (kho đang chọn)"
+                value={overview.lowCount}
+                icon="⚠️"
+                tone="warning"
+              />
+              <StatCard label="Chất lỏng sắp hết" value={overview.liquidLow} icon="💧" tone="info" />
+              <StatCard
+                label="Xuất bếp hôm nay"
+                value={overview.todayUsageLines}
+                icon="👨‍🍳"
+                hint="KHO1 khi bếp READY"
+              />
+              <StatCard label="Phiếu NCC hôm nay" value={overview.todayReceiptCount} icon="📥" />
+              <StatCard
+                label="Giá trị NCC hôm nay"
+                value={formatCurrency(overview.todayReceiptValue ?? 0)}
+                icon="💰"
+                tone="info"
+              />
+              <StatCard
+                label="NCC tháng này"
+                value={formatCurrency(overview.monthReceiptValue ?? 0)}
+                icon="📊"
+                hint={`${overview.monthReceiptCount ?? 0} phiếu`}
+              />
+            </div>
+          </>
         ) : null}
-
         <section>
           <h2 className="mb-4 text-sm font-bold uppercase tracking-wide text-stone-600">
             Nghiệp vụ
@@ -181,7 +237,9 @@ export function AccountingHomeView() {
                 stat={
                   m.href.includes('requests') && pendingCount > 0
                     ? `${pendingCount} chờ`
-                    : undefined
+                    : m.href.includes('supplier') && overview
+                      ? formatCurrency(overview.todayReceiptValue ?? 0)
+                      : undefined
                 }
               />
             ))}

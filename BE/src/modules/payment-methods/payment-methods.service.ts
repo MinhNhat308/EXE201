@@ -35,9 +35,29 @@ export class PaymentMethodsService implements OnModuleInit {
     }
   }
 
-  async findAll(activeOnly = false): Promise<PaymentMethodDocument[]> {
+  async findAll(activeOnly = false, includeQr = false) {
     const filter = activeOnly ? { isActive: true } : {};
-    return this.paymentModel.find(filter).sort({ sortOrder: 1 }).exec();
+    const docs = await this.paymentModel.find(filter).sort({ sortOrder: 1 }).exec();
+    return docs.map((doc) => {
+      const json = doc.toJSON() as PaymentMethodConfig & { id?: string };
+      if (!includeQr) {
+        delete json.qrImageUrl;
+      }
+      return json;
+    });
+  }
+
+  async findOne(id: string) {
+    const doc = await this.paymentModel.findById(id).exec();
+    if (!doc) throw new NotFoundException('Không tìm thấy phương thức thanh toán');
+    return doc.toJSON() as PaymentMethodConfig & { id?: string };
+  }
+
+  async findByCodeForDisplay(code: string) {
+    const doc = await this.paymentModel
+      .findOne({ code: code.toUpperCase(), isActive: true })
+      .exec();
+    return doc ? (doc.toJSON() as PaymentMethodConfig & { id?: string }) : null;
   }
 
   async findByCode(code: string): Promise<PaymentMethodDocument | null> {

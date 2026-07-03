@@ -22,4 +22,9 @@ export class UpdateIngredientDto {
   @IsOptional()
   @IsString()
   sku?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  shelfLifeDays?: number;
 }

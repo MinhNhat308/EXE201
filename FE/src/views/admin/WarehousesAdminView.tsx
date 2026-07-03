@@ -2,11 +2,13 @@
 
 import { FormEvent, useCallback, useEffect, useState } from 'react';
 import { InventoryController } from '@/controllers/inventory.controller';
+import { useActiveBranch } from '@/lib/use-active-branch';
 import { WarehouseLocation } from '@/models/inventory.model';
 import { AdminLayout } from './AdminLayout';
 import { Modal } from '@/views/components/Modal';
 
 export function WarehousesAdminView() {
+  const { branchId, version } = useActiveBranch();
   const [items, setItems] = useState<WarehouseLocation[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<WarehouseLocation | null>(null);
@@ -24,14 +26,14 @@ export function WarehousesAdminView() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const data = await InventoryController.getWarehouses(true);
+      const data = await InventoryController.getWarehouses(true, branchId, true);
       setItems(data);
     } catch {
       setError('Không tải được danh sách kho');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [branchId, version]);
 
   useEffect(() => {
     load();
@@ -190,7 +192,7 @@ export function WarehousesAdminView() {
             </label>
             <button
               type="submit"
-              className="w-full rounded-lg bg-amber-500 py-2.5 font-medium text-white"
+              className="w-full rounded-lg bg-[#2F80ED] py-2.5 font-medium text-white"
             >
               Lưu cấu hình
             </button>

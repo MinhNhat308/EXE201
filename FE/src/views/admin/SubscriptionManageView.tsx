@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { SubscriptionController } from '@/controllers/subscription.controller';
 import { BRAND } from '@/lib/brand';
@@ -10,6 +11,7 @@ import {
   SubscriptionStatus,
   TenantInfo,
 } from '@/models/tenant.model';
+import { SEGMENTS, segmentLabel } from '@/lib/segments';
 import { AdminLayout } from './AdminLayout';
 
 export function SubscriptionManageView() {
@@ -61,7 +63,9 @@ export function SubscriptionManageView() {
     setMessage('');
     try {
       await SubscriptionController.upgrade(plan);
-      setMessage(`Đã chuyển sang gói ${plan}. Thanh toán tại mục Hóa đơn nếu cần.`);
+      setMessage(
+        `Đã chọn gói ${segmentLabel(plan)}. Tạo hóa đơn và thanh toán tại mục Thanh toán để kích hoạt.`,
+      );
       await load();
     } catch (err) {
       setMessage(err instanceof Error ? err.message : 'Nâng cấp thất bại');
@@ -76,7 +80,16 @@ export function SubscriptionManageView() {
   return (
     <AdminLayout>
       <h1 className="text-2xl font-bold">Gói đăng ký BOBAPOS</h1>
-      <p className="mt-1 text-stone-500">Quản lý gói Standard / Premium và trial</p>
+      <p className="mt-1 text-stone-500">
+        Trial 7 ngày Premium → sau đó thanh toán gói đã chọn tại mục Thanh toán
+      </p>
+
+      <Link
+        href="/dashboard/admin/billing"
+        className={`mt-4 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-md ${BRAND.primary}`}
+      >
+        Thanh toán & gia hạn gói →
+      </Link>
 
       {loading ? (
         <p className="mt-8 text-stone-500">Đang tải...</p>
@@ -88,6 +101,12 @@ export function SubscriptionManageView() {
               <p className="text-xl font-bold">{tenant.storeName}</p>
               <p className="text-sm text-stone-600">
                 Slug: <code className="rounded bg-stone-100 px-1">{tenant.slug}</code>
+                {tenant.intendedPlan && tenant.status === 'TRIAL' && (
+                  <>
+                    {' '}
+                    · Sau trial: <strong>{segmentLabel(tenant.intendedPlan)}</strong>
+                  </>
+                )}
               </p>
             </div>
           )}
@@ -97,11 +116,25 @@ export function SubscriptionManageView() {
               <div className="flex flex-wrap gap-4 justify-between">
                 <div>
                   <p className="text-sm opacity-70">Gói hiện tại</p>
-                  <p className="text-2xl font-bold">{subscription.plan}</p>
+                  <p className="text-2xl font-bold">
+                    {subscription.status === SubscriptionStatus.TRIAL
+                      ? 'Premium Trial'
+                      : segmentLabel(subscription.plan)}
+                  </p>
                   <p className="mt-1">
                     Trạng thái: <strong>{subscription.status}</strong> · Còn{' '}
                     <strong>{displayDays}</strong> ngày
                   </p>
+                  {subscription.status === SubscriptionStatus.TRIAL && tenant?.intendedPlan && (
+                    <p className="mt-2 text-sm">
+                      Sau trial sẽ chuyển sang gói{' '}
+                      <strong>{segmentLabel(tenant.intendedPlan)}</strong> khi bạn thanh toán tại{' '}
+                      <Link href="/dashboard/admin/billing" className="font-semibold underline">
+                        Thanh toán & hóa đơn
+                      </Link>
+                      .
+                    </p>
+                  )}
                   {usage && (
                     <p className="mt-2 text-sm">
                       Nhân viên: {usage.employees}/{usage.maxEmployees}
@@ -112,26 +145,25 @@ export function SubscriptionManageView() {
             </div>
           )}
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            {[SubscriptionPlan.STANDARD, SubscriptionPlan.PREMIUM].map((plan) => (
-              <div key={plan} className="rounded-2xl border bg-white p-5 shadow-sm">
-                <h3 className="font-bold">{plan}</h3>
-                <p className="mt-1 text-sm text-stone-600">
-                  {plan === SubscriptionPlan.STANDARD
-                    ? '10 nhân viên · 1 chi nhánh'
-                    : 'Không giới hạn nhân viên · đa chi nhánh'}
+          <div className="grid gap-4 sm:grid-cols-3">
+            {SEGMENTS.map((seg) => (
+              <div key={seg.plan} className="rounded-2xl border bg-white p-5 shadow-sm">
+                <h3 className="font-bold">{seg.name}</h3>
+                <p className="mt-1 text-sm text-stone-600">{seg.tagline}</p>
+                <p className="mt-1 text-xs text-stone-500">
+                  {seg.employees} · {seg.branches}
                 </p>
                 <button
                   type="button"
-                  disabled={subscription?.plan === plan || upgrading !== null}
-                  onClick={() => handleUpgrade(plan)}
+                  disabled={subscription?.plan === seg.plan || upgrading !== null}
+                  onClick={() => handleUpgrade(seg.plan)}
                   className={`mt-4 w-full rounded-xl py-2.5 text-sm font-semibold text-white disabled:opacity-50 ${BRAND.primary}`}
                 >
-                  {upgrading === plan
+                  {upgrading === seg.plan
                     ? 'Đang xử lý...'
-                    : subscription?.plan === plan
+                    : subscription?.plan === seg.plan
                       ? 'Đang dùng'
-                      : `Chọn ${plan}`}
+                      : `Chọn ${seg.shortName}`}
                 </button>
               </div>
             ))}

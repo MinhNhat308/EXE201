@@ -1,3 +1,5 @@
+import { Role } from '@/models/user.model';
+
 export enum WorkShift {
   MORNING = 'MORNING',
   AFTERNOON = 'AFTERNOON',
@@ -26,16 +28,22 @@ export const WORK_SHIFT_HOURS: Record<WorkShift, string> = {
 
 export const WORK_ROLE_LABELS: Record<WorkRole, string> = {
   [WorkRole.CASHIER]: 'Thu ngân',
-  [WorkRole.SERVER]: 'Phục vụ',
+  [WorkRole.SERVER]: 'Phục vụ / Bồi bàn',
 };
 
 export interface StaffSession {
+  /** ID ca trên server (Store) */
+  sessionId?: string;
   workShift: WorkShift;
-  workRole: WorkRole;
+  /** Chỉ STAFF — Thu ngân hoặc Phục vụ */
+  workRole?: WorkRole;
+  /** Role đăng nhập lúc check-in */
+  checkedInRole: Role;
   startedAt: string;
+  branchId?: string;
 }
 
 export const STAFF_ROUTES: Record<WorkRole, string> = {
-  [WorkRole.CASHIER]: '/dashboard/staff/cashier',
+  [WorkRole.CASHIER]: '/dashboard/staff/cashier/orders',
   [WorkRole.SERVER]: '/dashboard/staff/server',
 };

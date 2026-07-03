@@ -5,10 +5,10 @@ import { usePolling } from '@/lib/use-polling';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { OrderController } from '@/controllers/order.controller';
-import { AuthController } from '@/controllers/auth.controller';
 import { getStoredUser } from '@/lib/auth-storage';
 import { canAccessRole, isStoreOwner } from '@/lib/role-access';
 import { resolveStaffSession } from '@/lib/staff-session-storage';
+import { STORE_CHECK_IN_PATH, STORE_CASHIER_POS_PATH } from '@/lib/workspace-routes';
 import {
   isPendingStatus,
   normalizeStatus,
@@ -29,13 +29,20 @@ import { OrderStatusBadge } from '@/views/orders/OrderStatusBadge';
 import { CancelOrderModal } from '@/views/orders/CancelOrderModal';
 import { EditOrderModal } from '@/views/orders/EditOrderModal';
 
-type FilterKey = 'all' | OrderStatus.PENDING | OrderStatus.PREPARING | OrderStatus.READY | OrderStatus.CANCELLED;
+type FilterKey =
+  | 'all'
+  | OrderStatus.PENDING
+  | OrderStatus.PREPARING
+  | OrderStatus.READY
+  | OrderStatus.COMPLETED
+  | OrderStatus.CANCELLED;
 
 const FILTERS: { key: FilterKey; label: string }[] = [
   { key: 'all', label: 'Tất cả' },
   { key: OrderStatus.PENDING, label: 'Chưa thực hiện' },
   { key: OrderStatus.PREPARING, label: 'Đang thực hiện' },
-  { key: OrderStatus.READY, label: 'Đã hoàn thành' },
+  { key: OrderStatus.READY, label: 'Sẵn sàng bưng' },
+  { key: OrderStatus.COMPLETED, label: 'Đã giao khách' },
   { key: OrderStatus.CANCELLED, label: 'Đã hủy' },
 ];
 
@@ -76,7 +83,7 @@ export function CashierOrdersView() {
     }
     if (!session || session.workRole !== WorkRole.CASHIER) {
       if (!isStoreOwner(stored.role)) {
-        router.replace('/dashboard/staff/setup');
+        router.replace(STORE_CHECK_IN_PATH);
       }
       return;
     }
@@ -122,7 +129,7 @@ export function CashierOrdersView() {
             <p className="text-xs text-white/80">
               {WORK_ROLE_LABELS[WorkRole.CASHIER]} · {WORK_SHIFT_LABELS[session.workShift]}
             </p>
-            <h1 className="text-lg font-bold">Quản lý đơn hàng</h1>
+            <h1 className="text-lg font-bold">Hóa đơn hôm nay</h1>
           </div>
           <div className="flex gap-2">
             <button
@@ -133,10 +140,10 @@ export function CashierOrdersView() {
               🔄
             </button>
             <Link
-              href="/dashboard/staff/cashier"
-              className={`rounded-lg px-3 py-1.5 text-sm font-semibold text-[#2F80ED] bg-white hover:bg-white/90`}
+              href={STORE_CASHIER_POS_PATH}
+              className="rounded-lg bg-white px-3 py-1.5 text-sm font-semibold text-[#2F80ED] hover:bg-white/90"
             >
-              + Tạo đơn
+              🛒 Bán hàng
             </Link>
           </div>
         </div>
@@ -219,7 +226,7 @@ export function CashierOrdersView() {
                   <p className="mt-4 text-sm text-red-600">Đơn đã hủy</p>
                 ) : (
                   <p className="mt-4 rounded-xl bg-stone-50 px-3 py-2 text-sm text-stone-500">
-                    Bếp đã nhận đơn — không thể sửa hoặc hủy. Liên hệ quản lý nếu cần.
+                    Bếp đã nhận đơn — không thể sửa hoặc hủy.
                   </p>
                 )}
               </div>

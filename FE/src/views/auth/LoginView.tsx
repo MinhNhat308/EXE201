@@ -1,46 +1,89 @@
 'use client';
 
-import Image from 'next/image';
 import Link from 'next/link';
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { BrandLogo } from '@/components/BrandLogo';
+import { useState, useEffect, useMemo } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { AuthController } from '@/controllers/auth.controller';
-import { BRAND, BRAND_COVER } from '@/lib/brand';
-import { DEMO_ACCOUNTS, DemoSegment, getDemoAccount } from '@/lib/demo-accounts';
-import { DASHBOARD_ROUTES } from '@/models/user.model';
+import { hydrateAuthFromServer } from '@/lib/auth-hydrate';
+import { getStoredTenant, getStoredUser, getToken } from '@/lib/auth-storage';
+import { BRAND } from '@/lib/brand';
+import { getPostLoginPath } from '@/lib/onboarding';
+import type { TenantInfo } from '@/models/tenant.model';
+import { Role, User } from '@/models/user.model';
+import { AuthMarketingLayout } from './AuthMarketingLayout';
 
-type LoginMode = 'owner' | 'staff';
+function needsStoreCode(identifier: string) {
+  const id = identifier.trim();
+  return id.length > 0 && !id.includes('@');
+}
 
 export function LoginView() {
   const router = useRouter();
-  const [mode, setMode] = useState<LoginMode>('owner');
+  const searchParams = useSearchParams();
   const [identifier, setIdentifier] = useState('');
   const [storeSlug, setStoreSlug] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [success, setSuccess] = useState('');
   const [loading, setLoading] = useState(false);
+  const [existingSession, setExistingSession] = useState<{
+    name: string;
+    href: string;
+  } | null>(null);
 
-  const fillDemo = (which: DemoSegment) => {
-    const demo = getDemoAccount(which);
-    setMode('owner');
-    setIdentifier(demo.identifier);
-    setPassword(demo.password);
-    setStoreSlug('');
-    setError('');
-  };
+  const showStoreCode = useMemo(() => needsStoreCode(identifier), [identifier]);
+
+  useEffect(() => {
+    if (searchParams.get('registered') === '1') {
+      const email = searchParams.get('email');
+      if (email) setIdentifier(email);
+      setSuccess('Đăng ký thành công! Mời đăng nhập để bắt đầu.');
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    void (async () => {
+      let user = getStoredUser<User>();
+      if (!user && getToken()) {
+        user = await hydrateAuthFromServer();
+      }
+      if (cancelled || !user?.role) return;
+
+      const tenant = getStoredTenant<TenantInfo>();
+      setExistingSession({
+        name: user.fullName,
+        href: getPostLoginPath(user.role as Role, tenant ?? undefined),
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
+
+    const id = identifier.trim();
+    const slug = storeSlug.trim();
+    if (needsStoreCode(id) && !slug) {
+      setError('Nhân viên cần nhập mã cửa hàng (chủ quán cung cấp).');
+      return;
+    }
+
     setLoading(true);
     try {
-      const { user } = await AuthController.login({
-        identifier: identifier.trim(),
+      const { user, tenant, plan } = await AuthController.login({
+        identifier: id,
         password,
-        storeSlug: mode === 'staff' ? storeSlug.trim() : undefined,
+        storeSlug: needsStoreCode(id) ? slug : undefined,
       });
-      router.replace(DASHBOARD_ROUTES[user.role]);
+      router.replace(
+        getPostLoginPath(user.role as Role, tenant as TenantInfo | undefined, plan),
+      );
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Đăng nhập thất bại');
     } finally {
@@ -49,189 +92,122 @@ export function LoginView() {
   };
 
   return (
-    <div className={`flex min-h-screen ${BRAND.pageBg}`}>
-      {/* Left panel */}
-      <div
-        className={`relative hidden w-[48%] flex-col justify-between overflow-hidden bg-gradient-to-br ${BRAND.headerGradient} p-10 text-white lg:flex`}
-      >
-        <div className="pointer-events-none absolute -right-20 -top-20 h-72 w-72 rounded-full bg-white/10 blur-3xl" />
-        <div className="pointer-events-none absolute -bottom-16 -left-16 h-64 w-64 rounded-full bg-blue-900/30 blur-3xl" />
+    <AuthMarketingLayout
+      title="Đăng nhập cửa hàng của bạn"
+      subtitle="Chủ quán dùng email. Nhân viên dùng tên đăng nhập kèm mã cửa hàng do chủ quán cấp."
+    >
+      <div className="mb-6">
+        <span className="inline-flex rounded-full bg-gradient-to-r from-sky-100 via-violet-100 to-rose-100 px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-violet-700">
+          Chào mừng trở lại
+        </span>
+        <h2 className="mt-3 text-2xl font-extrabold text-stone-900">Đăng nhập</h2>
+        <p className="mt-1 text-sm text-stone-500">
+          Email (chủ quán) hoặc username (nhân viên)
+        </p>
+      </div>
 
-        <div className="relative">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm font-medium text-white/85 hover:text-white">
-            <BrandLogo size={28} showName={false} />
-            <span>← Trang chủ</span>
-          </Link>
-          <h1 className="mt-8 text-3xl font-extrabold leading-tight xl:text-4xl">
-            Đăng nhập
-            <br />
-            cửa hàng của bạn
-          </h1>
-          <p className="mt-4 max-w-sm text-sm leading-relaxed text-blue-100">
-            Chủ quán dùng email. Nhân viên dùng username + mã cửa hàng (slug).
+      {existingSession && (
+        <div className="mb-4 rounded-xl border border-sky-200 bg-sky-50 px-4 py-3 text-sm text-sky-900">
+          <p>
+            Bạn đang đăng nhập là <strong>{existingSession.name}</strong>.
           </p>
-        </div>
-
-        <div className="relative space-y-2">
-          <p className="text-xs font-bold uppercase tracking-widest text-white/60">Demo 3 phân khúc</p>
-          {DEMO_ACCOUNTS.map((demo) => (
-            <button
-              key={demo.segment}
-              type="button"
-              onClick={() => fillDemo(demo.segment)}
-              className="w-full rounded-2xl border border-white/20 bg-white/10 p-3.5 text-left backdrop-blur transition hover:bg-white/20"
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Link
+              href={existingSession.href}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white ${BRAND.primary}`}
             >
-              <p className="text-sm font-bold">{demo.label}</p>
-              <p className="mt-0.5 text-xs text-blue-100">{demo.description}</p>
+              Tiếp tục vào ứng dụng
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                AuthController.logout();
+                setExistingSession(null);
+              }}
+              className="rounded-lg border border-sky-200 bg-white px-3 py-1.5 text-xs font-semibold text-sky-800"
+            >
+              Đăng xuất
             </button>
-          ))}
-        </div>
-
-        <div className="relative mx-auto w-full max-w-xs overflow-hidden rounded-2xl shadow-2xl ring-1 ring-white/20">
-          <div className="relative aspect-[4/3]">
-            <Image src={BRAND_COVER} alt="" fill className="object-cover" priority />
-            <div className="absolute inset-0 bg-gradient-to-t from-blue-950/80 to-transparent" />
-            <p className="absolute bottom-3 left-3 right-3 text-xs text-white/90">
-              POS · Bếp · Kho đồng bộ realtime
-            </p>
           </div>
         </div>
-      </div>
+      )}
 
-      {/* Form */}
-      <div className="flex flex-1 flex-col">
-        <div className="flex items-center justify-between p-6 lg:hidden">
-          <Link href="/" className={`font-bold ${BRAND.primaryText}`}>
-            ← BOBAPOS
-          </Link>
-          <Link href="/register" className={`text-sm font-semibold ${BRAND.primaryText}`}>
-            Đăng ký
-          </Link>
+      {success && (
+        <p className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-700">
+          {success}
+        </p>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <div>
+          <label className="mb-1.5 block text-sm font-semibold text-stone-700">
+            Email hoặc tên đăng nhập
+          </label>
+          <input
+            type="text"
+            autoComplete="username"
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
+            required
+            className={BRAND.input}
+            placeholder="email@congty.com hoặc ten_dang_nhap"
+          />
         </div>
 
-        <div className="flex flex-1 items-center justify-center px-4 py-6 sm:px-8">
-          <div className="w-full max-w-[420px]">
-            <div className="mb-8">
-              <div className="mb-4">
-                <BrandLogo size={48} showName={false} />
-              </div>
-              <h2 className="text-2xl font-bold text-stone-900">Chào mừng trở lại</h2>
-              <p className="mt-1 text-sm text-stone-500">Chọn loại tài khoản và đăng nhập</p>
-            </div>
-
-            {/* Mobile demo chips */}
-            <div className="mb-6 flex flex-col gap-2 lg:hidden">
-              {DEMO_ACCOUNTS.map((demo) => (
-                <button
-                  key={demo.segment}
-                  type="button"
-                  onClick={() => fillDemo(demo.segment)}
-                  className={`rounded-xl border px-3 py-2 text-left text-xs ${BRAND.primarySoft}`}
-                >
-                  <strong>{demo.label}</strong> — bấm để điền
-                </button>
-              ))}
-            </div>
-
-            <div className="mb-6 grid grid-cols-2 gap-1 rounded-2xl bg-stone-100 p-1">
-              {(['owner', 'staff'] as const).map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setMode(m)}
-                  className={`rounded-xl py-2.5 text-sm font-semibold transition ${
-                    mode === m
-                      ? 'bg-white text-stone-900 shadow-sm'
-                      : 'text-stone-500 hover:text-stone-700'
-                  }`}
-                >
-                  {m === 'owner' ? '👔 Chủ cửa hàng' : '🧾 Nhân viên'}
-                </button>
-              ))}
-            </div>
-
-            <form onSubmit={handleSubmit} className="space-y-4">
-              {mode === 'owner' ? (
-                <div>
-                  <label className="mb-1.5 block text-sm font-medium text-stone-700">Email</label>
-                  <input
-                    type="email"
-                    value={identifier}
-                    onChange={(e) => setIdentifier(e.target.value)}
-                    required
-                    className={`w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm outline-none ${BRAND.focusBorder} focus:ring-2 focus:ring-[#2F80ED]/20`}
-                    placeholder="demo-store@bobapos.test"
-                  />
-                </div>
-              ) : (
-                <>
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-stone-700">
-                      Tên đăng nhập
-                    </label>
-                    <input
-                      type="text"
-                      value={identifier}
-                      onChange={(e) => setIdentifier(e.target.value)}
-                      required
-                      className={`w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm outline-none ${BRAND.focusBorder} focus:ring-2 focus:ring-[#2F80ED]/20`}
-                      placeholder="cashier1"
-                    />
-                  </div>
-                  <div>
-                    <label className="mb-1.5 block text-sm font-medium text-stone-700">
-                      Mã cửa hàng (slug)
-                    </label>
-                    <input
-                      type="text"
-                      value={storeSlug}
-                      onChange={(e) => setStoreSlug(e.target.value)}
-                      required
-                      className={`w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm outline-none ${BRAND.focusBorder} focus:ring-2 focus:ring-[#2F80ED]/20`}
-                      placeholder="demo-chain"
-                    />
-                    <p className="mt-1 text-xs text-stone-400">Chủ quán cung cấp mã này khi tạo NV</p>
-                  </div>
-                </>
-              )}
-
-              <div>
-                <label className="mb-1.5 block text-sm font-medium text-stone-700">Mật khẩu</label>
-                <input
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  minLength={6}
-                  className={`w-full rounded-xl border border-stone-200 bg-white px-4 py-3 text-sm outline-none ${BRAND.focusBorder} focus:ring-2 focus:ring-[#2F80ED]/20`}
-                  placeholder="••••••••"
-                />
-              </div>
-
-              {error && (
-                <p className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-600">
-                  {error}
-                </p>
-              )}
-
-              <button
-                type="submit"
-                disabled={loading}
-                className={`w-full rounded-xl py-3.5 text-sm font-bold text-white shadow-lg shadow-blue-500/20 transition disabled:opacity-60 ${BRAND.primary}`}
-              >
-                {loading ? 'Đang đăng nhập...' : 'Đăng nhập'}
-              </button>
-            </form>
-
-            <p className="mt-8 text-center text-sm text-stone-500">
-              Chưa có cửa hàng?{' '}
-              <Link href="/register" className={`font-semibold ${BRAND.primaryText}`}>
-                Đăng ký trial 7 ngày
-              </Link>
+        {showStoreCode && (
+          <div className="rounded-2xl border border-violet-100 bg-violet-50/50 p-4">
+            <label className="mb-1.5 block text-sm font-semibold text-stone-700">
+              Mã cửa hàng
+            </label>
+            <input
+              type="text"
+              value={storeSlug}
+              onChange={(e) => setStoreSlug(e.target.value)}
+              required
+              className={BRAND.input}
+              placeholder="ma-cua-hang"
+            />
+            <p className="mt-2 text-xs text-violet-600">
+              Mã do chủ quán cung cấp khi tạo tài khoản nhân viên
             </p>
           </div>
+        )}
+
+        <div>
+          <label className="mb-1.5 block text-sm font-semibold text-stone-700">Mật khẩu</label>
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+            minLength={6}
+            className={BRAND.input}
+            placeholder="••••••••"
+          />
         </div>
-      </div>
-    </div>
+
+        {error && (
+          <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
+            {error}
+          </p>
+        )}
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="w-full rounded-xl bg-gradient-to-r from-[#2F80ED] via-[#8B5CF6] to-[#FF8E53] py-3.5 text-sm font-bold text-white shadow-lg shadow-violet-300/40 transition hover:shadow-xl disabled:opacity-60"
+        >
+          {loading ? 'Đang đăng nhập...' : 'Đăng nhập →'}
+        </button>
+
+        <p className="pt-2 text-center text-sm text-stone-500">
+          Chưa có cửa hàng?{' '}
+          <Link href="/register" className={`font-semibold ${BRAND.primaryText}`}>
+            Đăng ký trial 7 ngày
+          </Link>
+        </p>
+      </form>
+    </AuthMarketingLayout>
   );
 }

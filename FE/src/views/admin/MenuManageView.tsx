@@ -270,7 +270,7 @@ export function MenuManageView() {
             </button>
             <button
               type="submit"
-              className="flex-1 rounded-xl bg-amber-500 py-2.5 text-sm font-bold text-white"
+              className="flex-1 rounded-xl bg-[#2F80ED] py-2.5 text-sm font-bold text-white"
             >
               Lưu
             </button>

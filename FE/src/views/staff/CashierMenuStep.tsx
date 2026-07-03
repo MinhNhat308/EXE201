@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { BRAND } from '@/lib/brand';
 import { formatCurrency } from '@/lib/format';
 import { formatToppingsLabel } from '@/lib/cart';
+import { formatSugarIceLine } from '@/lib/sugar-ice';
 import { CartItem, MenuItem } from '@/models/menu.model';
 import { MenuProductImage } from '@/views/components/MenuProductImage';
 import { CardGridSkeleton } from '@/views/components/Skeleton';
@@ -55,10 +56,15 @@ export function CashierMenuStep({
 
   const cartCount = cart.reduce((sum, i) => sum + i.quantity, 0);
 
-  const qtyInCartForItem = (menuItemId: string) =>
-    cart
-      .filter((c) => c.menuItemId === menuItemId)
-      .reduce((sum, c) => sum + c.quantity, 0);
+  const qtyByMenuItem = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const line of cart) {
+      map.set(line.menuItemId, (map.get(line.menuItemId) ?? 0) + line.quantity);
+    }
+    return map;
+  }, [cart]);
+
+  const qtyInCartForItem = (menuItemId: string) => qtyByMenuItem.get(menuItemId) ?? 0;
 
   return (
     <div className="grid h-[calc(100dvh-9.5rem)] grid-cols-1 gap-3 lg:grid-cols-[minmax(0,3.5fr)_minmax(17rem,0.5fr)]">
@@ -213,6 +219,12 @@ export function CashierMenuStep({
                         </p>
                       ) : (
                         <p className="mt-0.5 text-[11px] text-stone-500">Không topping</p>
+                      )}
+                      {(item.sugarPercent != null &&
+                        (item.sugarPercent !== 100 || item.icePercent !== 100)) && (
+                        <p className="mt-0.5 text-[11px] text-sky-300">
+                          {formatSugarIceLine(item.sugarPercent, item.icePercent)}
+                        </p>
                       )}
                       <p className="text-xs text-stone-400">
                         {formatCurrency(item.price)} / ly

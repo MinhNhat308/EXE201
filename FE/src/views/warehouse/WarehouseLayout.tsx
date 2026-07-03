@@ -16,6 +16,10 @@ const NAV: NavItem[] = [
 
   { href: '/dashboard/warehouse/replenish', label: 'Bổ sung tồn', icon: '🔄' },
 
+  { href: '/dashboard/warehouse/returns', label: 'Thu hồi về kho tổng', icon: '📥' },
+
+  { href: '/dashboard/warehouse/supplier', label: 'Phiếu NCC', icon: '🏭' },
+
   { href: '/dashboard/warehouse/requests', label: 'Danh sách phiếu', icon: '📋' },
 
   { href: '/dashboard/warehouse/stock', label: 'Tồn kho', icon: '📦' },

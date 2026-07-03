@@ -1,6 +1,7 @@
 'use client';
 
 import { ReactNode } from 'react';
+import { BRAND } from '@/lib/brand';
 
 interface Column<T> {
   key: string;
@@ -42,7 +43,7 @@ export function AdminCrudTable<T extends { id: string }>({
           <button
             type="button"
             onClick={onAdd}
-            className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-amber-600"
+            className={BRAND.btnPrimary}
           >
             + {addLabel}
           </button>
@@ -70,7 +71,7 @@ export function AdminCrudTable<T extends { id: string }>({
                 {data.map((row) => (
                   <tr
                     key={row.id}
-                    className="border-b border-stone-50 hover:bg-amber-50/30"
+                    className="border-b border-stone-50 hover:bg-[#2F80ED]/5"
                   >
                     {columns.map((col) => (
                       <td key={col.key} className="px-4 py-3">

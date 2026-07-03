@@ -24,6 +24,14 @@ export class PaymentMethodConfig {
   @Prop({ default: 0 })
   sortOrder: number;
 
+  /** Ảnh QR (URL hoặc data URL) — Solo CK/QR */
+  @Prop()
+  qrImageUrl?: string;
+
+  /** Ghi chú STK / ngân hàng hiển thị cùng QR */
+  @Prop({ trim: true })
+  bankAccountInfo?: string;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -41,6 +49,8 @@ PaymentMethodSchema.set('toJSON', {
     description: ret.description,
     isActive: ret.isActive,
     sortOrder: ret.sortOrder,
+    qrImageUrl: ret.qrImageUrl,
+    bankAccountInfo: ret.bankAccountInfo,
     createdAt: ret.createdAt,
     updatedAt: ret.updatedAt,
   }),

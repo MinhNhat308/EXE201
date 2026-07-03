@@ -51,6 +51,13 @@ export class UsersController {
     return user;
   }
 
+  @Get('operational')
+  @RequireFeature(SaasFeature.EMPLOYEES)
+  @Roles(Role.ADMIN, Role.STORE_MANAGER, Role.ACCOUNTING)
+  findOperational() {
+    return this.usersService.findOperationalStaff();
+  }
+
   @Get(':id')
   @Roles(Role.ADMIN)
   findOne(@Param('id') id: string) {

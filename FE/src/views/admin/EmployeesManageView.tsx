@@ -1,24 +1,49 @@
 'use client';
 
-import { FormEvent, useCallback, useEffect, useState } from 'react';
+import { FormEvent, useCallback, useEffect, useMemo, useState } from 'react';
 import { AdminUserController } from '@/controllers/admin.controller';
-import { ROLE_LABELS, REGISTERABLE_ROLES, Role, User } from '@/models/user.model';
+import {
+  getStoredPlan,
+  getStoredSubscription,
+  getStoredTenant,
+} from '@/lib/auth-storage';
+import {
+  getRegisterableRoles,
+  STORE_EMPLOYEE_ROLE_LABELS,
+} from '@/lib/registerable-roles';
+import { ROLE_LABELS, Role, User } from '@/models/user.model';
+import { TenantInfo } from '@/models/tenant.model';
 import { AdminLayout } from './AdminLayout';
 import { AdminCrudTable } from './AdminCrudTable';
 import { Modal } from '@/views/components/Modal';
 
 export function EmployeesManageView() {
+  const tenant = getStoredTenant<TenantInfo>();
+  const sub = getStoredSubscription<{ plan?: string }>();
+  const plan = getStoredPlan() ?? sub?.plan;
+
+  const registerableRoles = useMemo(
+    () => getRegisterableRoles(plan, tenant),
+    [plan, tenant],
+  );
+
+  const roleLabel = (role: Role) =>
+    STORE_EMPLOYEE_ROLE_LABELS[role] ?? ROLE_LABELS[role] ?? role;
+
   const [employees, setEmployees] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<User | null>(null);
   const [error, setError] = useState('');
 
+  const defaultRole = registerableRoles[0] ?? Role.STAFF;
+
   const [form, setForm] = useState({
     fullName: '',
     email: '',
+    username: '',
     password: '',
-    role: Role.STAFF,
+    role: defaultRole,
     phone: '',
     address: '',
     isActive: true,
@@ -45,8 +70,9 @@ export function EmployeesManageView() {
     setForm({
       fullName: '',
       email: '',
+      username: '',
       password: '',
-      role: Role.STAFF,
+      role: defaultRole,
       phone: '',
       address: '',
       isActive: true,
@@ -59,6 +85,7 @@ export function EmployeesManageView() {
     setForm({
       fullName: user.fullName,
       email: user.email,
+      username: user.username ?? '',
       password: '',
       role: user.role as Role,
       phone: user.phone ?? '',
@@ -76,6 +103,7 @@ export function EmployeesManageView() {
         const payload: Record<string, unknown> = {
           fullName: form.fullName,
           email: form.email,
+          username: form.username.trim() || undefined,
           role: form.role,
           phone: form.phone || undefined,
           address: form.address || undefined,
@@ -88,9 +116,14 @@ export function EmployeesManageView() {
           setError('Mật khẩu tối thiểu 6 ký tự');
           return;
         }
+        if (!form.username.trim()) {
+          setError('Tên đăng nhập (username) bắt buộc cho nhân viên');
+          return;
+        }
         await AdminUserController.create({
           fullName: form.fullName,
           email: form.email,
+          username: form.username.trim(),
           password: form.password,
           role: form.role,
           phone: form.phone || undefined,
@@ -120,12 +153,21 @@ export function EmployeesManageView() {
         <p className="mb-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">{error}</p>
       )}
 
+      {tenant?.slug && (
+        <div className="mb-6 rounded-2xl border border-stone-200 bg-stone-50 px-4 py-3 text-sm text-stone-600">
+          Nhân viên đăng nhập bằng <strong>username</strong> + mã cửa hàng{' '}
+          <code className="rounded bg-white px-1.5 py-0.5 font-mono text-amber-800">
+            {tenant.slug}
+          </code>
+        </div>
+      )}
+
       <AdminCrudTable
         title="Quản lý nhân viên"
-        description="Tạo, sửa, xóa tài khoản và cấp quyền cho nhân viên"
+        description="Tạo tài khoản với username — NV dùng username + mã cửa hàng để đăng nhập"
         loading={loading}
         data={employees}
-        onAdd={openCreate}
+        onAdd={registerableRoles.length > 0 ? openCreate : undefined}
         addLabel="Thêm nhân viên"
         columns={[
           {
@@ -139,9 +181,16 @@ export function EmployeesManageView() {
             ),
           },
           {
+            key: 'username',
+            header: 'Username',
+            render: (r) => (
+              <span className="font-mono text-sm text-stone-700">{r.username ?? '—'}</span>
+            ),
+          },
+          {
             key: 'role',
             header: 'Vai trò',
-            render: (r) => ROLE_LABELS[r.role as Role] ?? r.role,
+            render: (r) => roleLabel(r.role as Role),
           },
           {
             key: 'phone',
@@ -207,7 +256,14 @@ export function EmployeesManageView() {
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
               className="w-full rounded-xl border px-3 py-2 text-sm"
-              placeholder="Email đăng nhập"
+              placeholder="Email (liên hệ / khôi phục)"
+            />
+            <input
+              required={!editing}
+              value={form.username}
+              onChange={(e) => setForm({ ...form, username: e.target.value.toLowerCase() })}
+              className="w-full rounded-xl border px-3 py-2 text-sm font-mono"
+              placeholder="Username đăng nhập (vd: cashier)"
             />
             <input
               type="password"
@@ -222,9 +278,9 @@ export function EmployeesManageView() {
               onChange={(e) => setForm({ ...form, role: e.target.value as Role })}
               className="w-full rounded-xl border px-3 py-2 text-sm"
             >
-              {REGISTERABLE_ROLES.map((role) => (
+              {registerableRoles.map((role) => (
                 <option key={role} value={role}>
-                  {ROLE_LABELS[role]}
+                  {roleLabel(role)}
                 </option>
               ))}
             </select>
@@ -261,7 +317,7 @@ export function EmployeesManageView() {
             </button>
             <button
               type="submit"
-              className="flex-1 rounded-xl bg-amber-500 py-2 font-bold text-white"
+              className="flex-1 rounded-xl bg-[#2F80ED] py-2 font-bold text-white"
             >
               {editing ? 'Cập nhật' : 'Tạo tài khoản'}
             </button>

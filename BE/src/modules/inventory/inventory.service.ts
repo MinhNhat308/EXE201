@@ -11,7 +11,7 @@ import {
   IngredientCategory,
   defaultUnitForCategory,
 } from '../../common/enums/ingredient-category.enum';
-import { StockMovementType } from '../../common/enums/stock-movement-type.enum';
+import { StockMovementType, STOCK_MOVEMENT_LABELS } from '../../common/enums/stock-movement-type.enum';
 import { OrderStatus, normalizeOrderStatus } from '../../common/enums/order-status.enum';
 import { MenuItem, MenuItemDocument } from '../menu/schemas/menu-item.schema';
 import { Order, OrderDocument } from '../orders/schemas/order.schema';
@@ -45,6 +45,7 @@ import {
   StockTransferRequest,
   StockTransferRequestDocument,
 } from './schemas/stock-transfer-request.schema';
+import { StockLot, StockLotDocument } from './schemas/stock-lot.schema';
 import {
   WarehouseStock,
   WarehouseStockDocument,
@@ -175,6 +176,8 @@ export class InventoryService implements OnModuleInit {
     private readonly warehouseStockModel: Model<WarehouseStockDocument>,
     @InjectModel(StockTransferRequest.name)
     private readonly stockRequestModel: Model<StockTransferRequestDocument>,
+    @InjectModel(StockLot.name)
+    private readonly lotModel: Model<StockLotDocument>,
     @InjectModel(User.name) private readonly userModel: Model<UserDocument>,
   ) {}
 
@@ -342,6 +345,9 @@ export class InventoryService implements OnModuleInit {
   }
 
   private async migrateWarehouseStocks() {
+    const existing = await this.warehouseStockModel.countDocuments().exec();
+    if (existing > 0) return;
+
     const warehouses = await this.warehouseModel.find().sort({ sortOrder: 1 }).exec();
     const kho1 = warehouses.find((w) => w.isKitchenSource) ?? warehouses[0];
     if (!kho1) return;
@@ -394,9 +400,30 @@ export class InventoryService implements OnModuleInit {
       .exec();
   }
 
-  async findWarehouses(includeInactive = false) {
-    const filter = includeInactive ? {} : { isActive: true };
+  async findWarehouses(includeInactive = false, branchId?: string) {
+    const filter: Record<string, unknown> = includeInactive ? {} : { isActive: true };
+    if (branchId) {
+      filter.branchId = new Types.ObjectId(branchId);
+    }
     return this.warehouseModel.find(filter).sort({ sortOrder: 1 }).exec();
+  }
+
+  private async resolveWarehouseIdsForBranch(
+    branchId?: string,
+  ): Promise<Types.ObjectId[] | undefined> {
+    if (!branchId) return undefined;
+    const whs = await this.findWarehouses(false, branchId);
+    return whs.map((w) => w._id);
+  }
+
+  private stockRequestBranchFilter(warehouseIds?: Types.ObjectId[]) {
+    if (!warehouseIds?.length) return {};
+    return {
+      $or: [
+        { fromWarehouseId: { $in: warehouseIds } },
+        { toWarehouseId: { $in: warehouseIds } },
+      ],
+    };
   }
 
   async updateWarehouse(id: string, dto: UpdateWarehouseDto) {
@@ -691,6 +718,9 @@ export class InventoryService implements OnModuleInit {
       return {
         id: r._id.toString(),
         menuItemId,
+        intensityPercent: raw.intensityPercent ?? 80,
+        sugarPercent: raw.sugarPercent ?? 80,
+        icePercent: raw.icePercent ?? 80,
         lines,
       };
     });
@@ -702,10 +732,18 @@ export class InventoryService implements OnModuleInit {
       quantity: l.quantity,
     }));
 
+    const update: Record<string, unknown> = {
+      menuItemId: new Types.ObjectId(dto.menuItemId),
+      lines,
+    };
+    if (dto.intensityPercent != null) {
+      update.intensityPercent = Math.min(100, Math.max(0, dto.intensityPercent));
+    }
+
     const doc = await this.recipeModel
       .findOneAndUpdate(
         { menuItemId: new Types.ObjectId(dto.menuItemId) },
-        { menuItemId: new Types.ObjectId(dto.menuItemId), lines },
+        update,
         { upsert: true, new: true },
       )
       .exec();
@@ -713,18 +751,75 @@ export class InventoryService implements OnModuleInit {
     return doc;
   }
 
+  async updateSoloRecipe(
+    menuItemId: string,
+    dto: { intensityPercent?: number; sugarPercent?: number; icePercent?: number },
+  ) {
+    const clamp = (v: number) => Math.min(100, Math.max(0, Math.round(v)));
+    const update: Record<string, number> = {};
+    if (dto.intensityPercent != null) update.intensityPercent = clamp(dto.intensityPercent);
+    if (dto.sugarPercent != null) update.sugarPercent = clamp(dto.sugarPercent);
+    if (dto.icePercent != null) update.icePercent = clamp(dto.icePercent);
+
+    return this.recipeModel
+      .findOneAndUpdate(
+        { menuItemId: new Types.ObjectId(menuItemId) },
+        {
+          $set: update,
+          $setOnInsert: {
+            menuItemId: new Types.ObjectId(menuItemId),
+            lines: [],
+            intensityPercent: 80,
+            sugarPercent: 80,
+            icePercent: 80,
+          },
+        },
+        { upsert: true, new: true },
+      )
+      .exec();
+  }
+
   async getStockDashboard(warehouseId?: string) {
     let wh: WarehouseLocationDocument;
     if (warehouseId) {
       wh = await this.getWarehouseOrThrow(warehouseId);
     } else {
-      wh = await this.getKitchenWarehouse();
+      const kitchen = await this.warehouseModel.findOne({ isKitchenSource: true }).exec();
+      if (!kitchen) {
+        return [];
+      }
+      wh = kitchen;
     }
     const stocks = await this.warehouseStockModel
       .find({ warehouseId: wh._id })
       .exec();
     const ingredients = await this.ingredientModel.find().exec();
     const ingMap = new Map(ingredients.map((i) => [i._id.toString(), i]));
+
+    const expiryLots = await this.lotModel
+      .find({
+        warehouseId: wh._id,
+        quantity: { $gt: 0 },
+        expiryDate: { $exists: true, $ne: null },
+      })
+      .sort({ expiryDate: 1 })
+      .exec();
+    const expiryByIng = new Map<
+      string,
+      { nearestExpiry: Date; expiringQty: number }
+    >();
+    for (const lot of expiryLots) {
+      const id = lot.ingredientId.toString();
+      const cur = expiryByIng.get(id);
+      if (!cur || (lot.expiryDate && lot.expiryDate < cur.nearestExpiry)) {
+        expiryByIng.set(id, {
+          nearestExpiry: lot.expiryDate!,
+          expiringQty: lot.quantity,
+        });
+      } else if (cur && lot.expiryDate?.getTime() === cur.nearestExpiry.getTime()) {
+        cur.expiringQty += lot.quantity;
+      }
+    }
 
     return stocks
       .map((ws) => {
@@ -734,6 +829,7 @@ export class InventoryService implements OnModuleInit {
         const unit = ing.unit;
         const fmt = formatDisplayStock(ws.currentStock, unit, category);
         const fmtMin = formatDisplayStock(ws.minStock, unit, category);
+        const exp = expiryByIng.get(ws.ingredientId.toString());
         return {
           ...ing.toJSON(),
           warehouseId: wh._id.toString(),
@@ -746,17 +842,64 @@ export class InventoryService implements OnModuleInit {
           displayStock: fmt.displayValue,
           displayUnit: fmt.displayUnit,
           displayMinStock: fmtMin.displayValue,
+          nearestExpiry: exp?.nearestExpiry?.toISOString(),
+          expiringQty: exp?.expiringQty,
         };
       })
       .filter((row): row is NonNullable<typeof row> => row !== null)
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
-  async getWarehouseOverview(warehouseId?: string) {
-    const warehouses = await this.findWarehouses();
-    const targetId = warehouseId ?? warehouses[0]?._id.toString();
+  private sumSupplierReceiptValue(
+    receipts: Pick<SupplierReceiptDocument, 'lines'>[],
+  ): number {
+    let total = 0;
+    for (const r of receipts) {
+      for (const l of r.lines ?? []) {
+        total += Math.round((l.quantity ?? 0) * (l.unitPrice ?? 0));
+      }
+    }
+    return total;
+  }
+
+  private async getSupplierReceiptMoneyStats(
+    start: Date,
+    end: Date,
+    warehouseIds?: Types.ObjectId[],
+  ) {
+    const filter: Record<string, unknown> = {
+      documentDate: { $gte: start, $lt: end },
+    };
+    if (warehouseIds?.length) {
+      filter.warehouseId = { $in: warehouseIds };
+    }
+    const receipts = await this.receiptModel.find(filter).select('lines').exec();
+    return {
+      count: receipts.length,
+      totalValue: this.sumSupplierReceiptValue(receipts),
+    };
+  }
+
+  async getWarehouseOverview(warehouseId?: string, branchId?: string) {
+    const warehouses = await this.findWarehouses(false, branchId);
+    const targetId =
+      warehouseId ??
+      warehouses.find((w) => w.isCentralWarehouse)?._id.toString() ??
+      warehouses[0]?._id.toString();
+    const warehouseIds = warehouses.map((w) => w._id);
     if (!targetId) {
-      return { lowCount: 0, totalItems: 0, liquidLow: 0, todayUsageLines: 0, todayReceiptCount: 0, byCategory: {}, warehouses: [] };
+      return {
+        lowCount: 0,
+        totalItems: 0,
+        liquidLow: 0,
+        todayUsageLines: 0,
+        todayReceiptCount: 0,
+        todayReceiptValue: 0,
+        monthReceiptCount: 0,
+        monthReceiptValue: 0,
+        byCategory: {},
+        warehouses: [],
+      };
     }
     const stock = await this.getStockDashboard(targetId);
     const byCategory = {
@@ -775,15 +918,16 @@ export class InventoryService implements OnModuleInit {
     };
 
     const today = new Date().toISOString().slice(0, 10);
-    const usage = await this.getDailyUsage(today, targetId);
-    const receiptCount = await this.receiptModel
-      .countDocuments({
-        documentDate: {
-          $gte: new Date(today),
-          $lt: new Date(new Date(today).getTime() + 86400000),
-        },
-      })
-      .exec();
+    const todayStart = new Date(today);
+    const todayEnd = new Date(todayStart.getTime() + 86400000);
+    const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+    const monthEnd = new Date(todayStart.getFullYear(), todayStart.getMonth() + 1, 1);
+
+    const [usage, todayReceipts, monthReceipts] = await Promise.all([
+      this.getDailyUsage(today, targetId),
+      this.getSupplierReceiptMoneyStats(todayStart, todayEnd, warehouseIds),
+      this.getSupplierReceiptMoneyStats(monthStart, monthEnd, warehouseIds),
+    ]);
 
     return {
       warehouseId: targetId,
@@ -792,7 +936,10 @@ export class InventoryService implements OnModuleInit {
       liquidLow: byCategory[IngredientCategory.LIQUID].filter((s) => s.isLow)
         .length,
       todayUsageLines: usage.movementCount,
-      todayReceiptCount: receiptCount,
+      todayReceiptCount: todayReceipts.count,
+      todayReceiptValue: todayReceipts.totalValue,
+      monthReceiptCount: monthReceipts.count,
+      monthReceiptValue: monthReceipts.totalValue,
       byCategory,
       warehouses: warehouses.map((w) => w.toJSON()),
     };
@@ -804,6 +951,16 @@ export class InventoryService implements OnModuleInit {
   ): Promise<SupplierReceiptDocument> {
     if (!dto.lines?.length) {
       throw new BadRequestException('Phải có ít nhất một dòng nguyên liệu');
+    }
+
+    const docNo = dto.documentNumber.trim();
+    const duplicate = await this.receiptModel
+      .findOne({ documentNumber: docNo })
+      .exec();
+    if (duplicate) {
+      throw new BadRequestException(
+        `Số chứng từ "${docNo}" đã tồn tại — dùng số HĐ/CT khác`,
+      );
     }
 
     const central = await this.getCentralWarehouse();
@@ -826,14 +983,22 @@ export class InventoryService implements OnModuleInit {
         ingredientId: new Types.ObjectId(l.ingredientId),
         quantity: l.quantity,
         unitPrice: l.unitPrice ?? 0,
+        expiryDate: l.expiryDate ? new Date(l.expiryDate) : undefined,
       })),
       createdBy: user._id,
       createdByName: user.fullName,
     });
 
     const saved = await receipt.save();
+    const docDate = new Date(dto.documentDate);
 
     for (const line of dto.lines) {
+      const ing = await this.ingredientModel.findById(line.ingredientId).exec();
+      const expiryDate = this.resolveLineExpiryDate(
+        line.expiryDate,
+        docDate,
+        ing ?? undefined,
+      );
       await this.applyStockChange(
         wh._id.toString(),
         line.ingredientId,
@@ -842,12 +1007,30 @@ export class InventoryService implements OnModuleInit {
         {
           supplierReceiptId: saved._id.toString(),
           note: `NCC ${dto.supplierName} · ${wh.code} · CT ${dto.documentNumber}`,
-          movementDate: new Date(dto.documentDate),
+          movementDate: docDate,
+          expiryDate,
         },
       );
     }
 
     return saved;
+  }
+
+  private resolveLineExpiryDate(
+    lineExpiry: string | undefined,
+    documentDate: Date,
+    ingredient?: IngredientDocument,
+  ): Date | undefined {
+    if (lineExpiry) {
+      return new Date(lineExpiry);
+    }
+    const days = ingredient?.shelfLifeDays;
+    if (days != null && days > 0) {
+      const d = new Date(documentDate);
+      d.setDate(d.getDate() + days);
+      return d;
+    }
+    return undefined;
   }
 
   async transferStock(_dto: TransferStockDto) {
@@ -1005,6 +1188,7 @@ export class InventoryService implements OnModuleInit {
     businessDate?: string;
     returnClosureStatus?: ReturnClosureStatus;
     parentRequestId?: string;
+    branchId?: string;
   }) {
     const filter: Record<string, unknown> = {};
     if (filters?.status) filter.status = filters.status;
@@ -1016,6 +1200,9 @@ export class InventoryService implements OnModuleInit {
     if (filters?.parentRequestId) {
       filter.parentRequestId = new Types.ObjectId(filters.parentRequestId);
     }
+
+    const warehouseIds = await this.resolveWarehouseIdsForBranch(filters?.branchId);
+    Object.assign(filter, this.stockRequestBranchFilter(warehouseIds));
 
     const list = await this.stockRequestModel
       .find(filter)
@@ -1104,41 +1291,36 @@ export class InventoryService implements OnModuleInit {
     return list.map((r) => this.mapStockRequest(r, ingMap));
   }
 
-  async getOperationsDashboard() {
+  async getOperationsDashboard(branchId?: string) {
     const today = new Date().toISOString().slice(0, 10);
+    const todayStart = new Date(today);
+    const todayEnd = new Date(todayStart.getTime() + 86400000);
+    const monthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+    const monthEnd = new Date(todayStart.getFullYear(), todayStart.getMonth() + 1, 1);
+
+    const warehouseIds = await this.resolveWarehouseIdsForBranch(branchId);
+    const branchStockFilter = this.stockRequestBranchFilter(warehouseIds);
+    const lotFilter =
+      warehouseIds?.length ? { warehouseId: { $in: warehouseIds } } : {};
+
     const [
       pendingApproval,
-      openIssuesToday,
-      partialIssuesToday,
       pendingReturnsToday,
       completedIssuesToday,
       completedReturnsToday,
-      overdueOpenIssues,
+      todayReceipts,
+      monthReceipts,
+      expiringSoonCount,
     ] = await Promise.all([
       this.stockRequestModel
-        .countDocuments({ status: StockRequestStatus.PENDING })
-        .exec(),
-      this.stockRequestModel
-        .countDocuments({
-          type: StockRequestType.DISPATCH_FROM_CENTRAL,
-          status: StockRequestStatus.COMPLETED,
-          businessDate: today,
-          returnClosureStatus: ReturnClosureStatus.OPEN,
-        })
-        .exec(),
-      this.stockRequestModel
-        .countDocuments({
-          type: StockRequestType.DISPATCH_FROM_CENTRAL,
-          status: StockRequestStatus.COMPLETED,
-          businessDate: today,
-          returnClosureStatus: ReturnClosureStatus.PARTIAL,
-        })
+        .countDocuments({ status: StockRequestStatus.PENDING, ...branchStockFilter })
         .exec(),
       this.stockRequestModel
         .countDocuments({
           type: StockRequestType.RETURN_TO_CENTRAL,
           status: StockRequestStatus.PENDING,
           businessDate: today,
+          ...branchStockFilter,
         })
         .exec(),
       this.stockRequestModel
@@ -1146,6 +1328,7 @@ export class InventoryService implements OnModuleInit {
           type: StockRequestType.DISPATCH_FROM_CENTRAL,
           status: StockRequestStatus.COMPLETED,
           businessDate: today,
+          ...branchStockFilter,
         })
         .exec(),
       this.stockRequestModel
@@ -1153,31 +1336,156 @@ export class InventoryService implements OnModuleInit {
           type: StockRequestType.RETURN_TO_CENTRAL,
           status: StockRequestStatus.COMPLETED,
           businessDate: today,
+          ...branchStockFilter,
         })
         .exec(),
-      this.stockRequestModel
-        .countDocuments({
-          type: StockRequestType.DISPATCH_FROM_CENTRAL,
-          status: StockRequestStatus.COMPLETED,
-          businessDate: { $lt: today },
-          returnClosureStatus: {
-            $in: [ReturnClosureStatus.OPEN, ReturnClosureStatus.PARTIAL],
-          },
-        })
-        .exec(),
+      this.getSupplierReceiptMoneyStats(todayStart, todayEnd, warehouseIds),
+      this.getSupplierReceiptMoneyStats(monthStart, monthEnd, warehouseIds),
+      this.countExpiringLots(7, lotFilter),
     ]);
 
     return {
       businessDate: today,
       pendingApproval,
-      openIssuesToday,
-      partialIssuesToday,
+      openIssuesToday: 0,
+      partialIssuesToday: 0,
       pendingReturnsToday,
       completedIssuesToday,
       completedReturnsToday,
-      overdueOpenIssues,
-      needsEndOfDayReturn: openIssuesToday + partialIssuesToday,
+      overdueOpenIssues: 0,
+      needsEndOfDayReturn: 0,
+      expiringSoonCount,
+      todayReceiptCount: todayReceipts.count,
+      todayReceiptValue: todayReceipts.totalValue,
+      monthReceiptCount: monthReceipts.count,
+      monthReceiptValue: monthReceipts.totalValue,
     };
+  }
+
+  async getExpiryAlerts(withinDays = 7, branchId?: string) {
+    const deadline = new Date();
+    deadline.setDate(deadline.getDate() + withinDays);
+    deadline.setHours(23, 59, 59, 999);
+
+    const warehouseIds = await this.resolveWarehouseIdsForBranch(branchId);
+    const lotFilter: Record<string, unknown> = {
+      quantity: { $gt: 0 },
+      expiryDate: { $exists: true, $ne: null, $lte: deadline },
+    };
+    if (warehouseIds?.length) {
+      lotFilter.warehouseId = { $in: warehouseIds };
+    }
+
+    const lots = await this.lotModel
+      .find(lotFilter)
+      .sort({ expiryDate: 1 })
+      .limit(100)
+      .exec();
+
+    const [ingredients, warehouses] = await Promise.all([
+      this.ingredientModel.find().exec(),
+      branchId ? this.findWarehouses(false, branchId) : this.findWarehouses(),
+    ]);
+    const ingMap = new Map(ingredients.map((i) => [i._id.toString(), i]));
+    const whMap = new Map(warehouses.map((w) => [w._id.toString(), w]));
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    return lots.map((lot) => {
+      const ing = ingMap.get(lot.ingredientId.toString());
+      const wh = whMap.get(lot.warehouseId.toString());
+      const expiry = lot.expiryDate ? new Date(lot.expiryDate) : undefined;
+      const daysLeft = expiry
+        ? Math.ceil((expiry.getTime() - today.getTime()) / 86400000)
+        : undefined;
+      return {
+        ingredientId: lot.ingredientId.toString(),
+        ingredientName: ing?.name ?? '—',
+        unit: ing?.unit ?? '',
+        warehouseCode: wh?.code ?? '',
+        warehouseName: wh?.name ?? '',
+        quantity: lot.quantity,
+        expiryDate: expiry?.toISOString(),
+        daysLeft,
+        isExpired: daysLeft != null && daysLeft < 0,
+      };
+    });
+  }
+
+  private async countExpiringLots(
+    withinDays: number,
+    extraFilter: Record<string, unknown> = {},
+  ) {
+    const deadline = new Date();
+    deadline.setDate(deadline.getDate() + withinDays);
+    deadline.setHours(23, 59, 59, 999);
+    return this.lotModel
+      .countDocuments({
+        quantity: { $gt: 0 },
+        expiryDate: { $exists: true, $ne: null, $lte: deadline },
+        ...extraFilter,
+      })
+      .exec();
+  }
+
+  private async addStockLot(
+    warehouseId: string,
+    ingredientId: string,
+    quantity: number,
+    expiryDate?: Date,
+    refs?: { supplierReceiptId?: string; stockRequestId?: string },
+  ) {
+    if (quantity <= 0) return;
+    await this.lotModel.create({
+      warehouseId: new Types.ObjectId(warehouseId),
+      ingredientId: new Types.ObjectId(ingredientId),
+      quantity,
+      expiryDate,
+      supplierReceiptId: refs?.supplierReceiptId
+        ? new Types.ObjectId(refs.supplierReceiptId)
+        : undefined,
+      stockRequestId: refs?.stockRequestId
+        ? new Types.ObjectId(refs.stockRequestId)
+        : undefined,
+      receivedAt: new Date(),
+    });
+  }
+
+  private async consumeStockLotsFIFO(
+    warehouseId: string,
+    ingredientId: string,
+    quantity: number,
+  ): Promise<{ quantity: number; expiryDate?: Date }[]> {
+    const lots = await this.lotModel
+      .find({
+        warehouseId: new Types.ObjectId(warehouseId),
+        ingredientId: new Types.ObjectId(ingredientId),
+        quantity: { $gt: 0 },
+      })
+      .sort({ expiryDate: 1, receivedAt: 1 })
+      .exec();
+
+    let remaining = quantity;
+    const slices: { quantity: number; expiryDate?: Date }[] = [];
+
+    for (const lot of lots) {
+      if (remaining <= 0.0001) break;
+      const take = Math.min(lot.quantity, remaining);
+      lot.quantity = Math.max(0, lot.quantity - take);
+      if (lot.quantity <= 0.0001) {
+        await lot.deleteOne();
+      } else {
+        await lot.save();
+      }
+      slices.push({ quantity: take, expiryDate: lot.expiryDate });
+      remaining -= take;
+    }
+
+    if (remaining > 0.0001) {
+      slices.push({ quantity: remaining, expiryDate: undefined });
+    }
+
+    return slices;
   }
 
   async reviewStockRequest(
@@ -1210,7 +1518,7 @@ export class InventoryService implements OnModuleInit {
     await req.save();
     await this.executeStockRequest(req);
     if (req.type === StockRequestType.DISPATCH_FROM_CENTRAL) {
-      req.returnClosureStatus = ReturnClosureStatus.OPEN;
+      req.returnClosureStatus = ReturnClosureStatus.NOT_APPLICABLE;
     } else if (req.type === StockRequestType.REPLENISH_FROM_CENTRAL) {
       req.returnClosureStatus = ReturnClosureStatus.NOT_APPLICABLE;
     }
@@ -1262,55 +1570,148 @@ export class InventoryService implements OnModuleInit {
 
     for (const line of req.lines) {
       const ingId = line.ingredientId.toString();
+      const qty = line.quantity;
+      const fromId = req.fromWarehouseId.toString();
+      const toId = req.toWarehouseId.toString();
+
+      const slices = await this.consumeStockLotsFIFO(fromId, ingId, qty);
       await this.applyStockChange(
-        req.fromWarehouseId.toString(),
+        fromId,
         ingId,
-        -line.quantity,
+        -qty,
         StockMovementType.TRANSFER_OUT,
         meta,
+        { skipLotConsume: true },
       );
-      await this.applyStockChange(
-        req.toWarehouseId.toString(),
-        ingId,
-        line.quantity,
-        StockMovementType.TRANSFER_IN,
-        meta,
-      );
+      for (const slice of slices) {
+        await this.applyStockChange(
+          toId,
+          ingId,
+          slice.quantity,
+          StockMovementType.TRANSFER_IN,
+          meta,
+          { skipLotConsume: true },
+        );
+        await this.addStockLot(
+          toId,
+          ingId,
+          slice.quantity,
+          slice.expiryDate,
+          { stockRequestId: req._id.toString() },
+        );
+      }
     }
   }
 
-  async getDocumentLedger(month: string) {
+  async getDocumentLedger(month: string, branchId?: string) {
     const [year, mon] = month.split('-').map(Number);
     const start = new Date(year, mon - 1, 1);
     const end = new Date(year, mon, 1);
 
-    const [receipts, requests] = await Promise.all([
-      this.receiptModel
-        .find({ documentDate: { $gte: start, $lt: end } })
-        .sort({ documentDate: 1 })
-        .exec(),
-      this.stockRequestModel
-        .find({
-          status: StockRequestStatus.COMPLETED,
-          completedAt: { $gte: start, $lt: end },
-        })
-        .sort({ completedAt: 1 })
-        .exec(),
+    const warehouseIds = await this.resolveWarehouseIdsForBranch(branchId);
+    const receiptFilter: Record<string, unknown> = {
+      documentDate: { $gte: start, $lt: end },
+    };
+    if (warehouseIds?.length) {
+      receiptFilter.warehouseId = { $in: warehouseIds };
+    }
+    const requestFilter: Record<string, unknown> = {
+      status: StockRequestStatus.COMPLETED,
+      completedAt: { $gte: start, $lt: end },
+      ...this.stockRequestBranchFilter(warehouseIds),
+    };
+
+    const [receipts, requests, ingredients] = await Promise.all([
+      this.receiptModel.find(receiptFilter).sort({ documentDate: 1 }).exec(),
+      this.stockRequestModel.find(requestFilter).sort({ completedAt: 1 }).exec(),
+      this.ingredientModel.find().exec(),
     ]);
+
+    const ingMap = new Map(ingredients.map((i) => [i._id.toString(), i]));
+    const supplierReceipts = receipts.map((r) =>
+      this.mapSupplierReceipt(r, ingMap),
+    );
+    const supplierReceiptTotalValue = supplierReceipts.reduce(
+      (sum, r) => sum + (r.totalValue ?? 0),
+      0,
+    );
 
     return {
       month,
-      supplierReceipts: receipts.map((r) => r.toJSON()),
+      supplierReceipts,
       stockRequests: requests.map((r) => r.toJSON()),
       summary: {
-        supplierReceiptCount: receipts.length,
+        supplierReceiptCount: supplierReceipts.length,
         completedRequestCount: requests.length,
+        supplierReceiptTotalValue,
       },
     };
   }
 
-  async findSupplierReceipts() {
-    return this.receiptModel.find().sort({ documentDate: -1 }).exec();
+  async findSupplierReceipts(branchId?: string) {
+    const warehouseIds = await this.resolveWarehouseIdsForBranch(branchId);
+    const filter: Record<string, unknown> = {};
+    if (warehouseIds?.length) {
+      filter.warehouseId = { $in: warehouseIds };
+    }
+    const receipts = await this.receiptModel
+      .find(filter)
+      .sort({ documentDate: -1, createdAt: -1 })
+      .limit(100)
+      .exec();
+    const ingredients = await this.ingredientModel.find().exec();
+    const ingMap = new Map(ingredients.map((i) => [i._id.toString(), i]));
+    return receipts.map((r) => this.mapSupplierReceipt(r, ingMap));
+  }
+
+  private mapSupplierReceipt(
+    r: SupplierReceiptDocument,
+    ingMap: Map<string, IngredientDocument>,
+  ) {
+    const raw = r.toObject();
+    const lines = (raw.lines ?? []).map(
+      (l: {
+        ingredientId: Types.ObjectId;
+        quantity: number;
+        unitPrice?: number;
+        expiryDate?: Date;
+      }) => {
+        const id = l.ingredientId?.toString() ?? '';
+        const ing = ingMap.get(id);
+        const unitPrice = l.unitPrice ?? 0;
+        const quantity = l.quantity ?? 0;
+        return {
+          ingredientId: id,
+          ingredientName: ing?.name,
+          unit: ing?.unit,
+          quantity,
+          unitPrice,
+          lineTotal: Math.round(quantity * unitPrice),
+          expiryDate: l.expiryDate
+            ? new Date(l.expiryDate).toISOString()
+            : undefined,
+        };
+      },
+    );
+    const totalValue = lines.reduce(
+      (sum: number, line: { lineTotal: number }) => sum + line.lineTotal,
+      0,
+    );
+    return {
+      id: r._id.toString(),
+      supplierName: raw.supplierName,
+      documentNumber: raw.documentNumber,
+      warehouseId: raw.warehouseId?.toString(),
+      warehouseCode: raw.warehouseCode,
+      warehouseName: raw.warehouseName,
+      documentDate: raw.documentDate,
+      note: raw.note,
+      lines,
+      lineCount: lines.length,
+      totalValue,
+      createdByName: raw.createdByName,
+      createdAt: raw.createdAt,
+    };
   }
 
   async getDailyUsage(dateStr: string, warehouseId?: string) {
@@ -1362,6 +1763,25 @@ export class InventoryService implements OnModuleInit {
     };
   }
 
+  /** Cảnh báo tồn thấp cho POS thu ngân — kho bếp (KHO1) */
+  async getPosStockAlerts() {
+    const warehouses = await this.findWarehouses();
+    const kitchen =
+      warehouses.find((w) => w.isKitchenSource) ?? warehouses[0];
+    if (!kitchen) {
+      return { count: 0, items: [] as { name: string; warehouseName: string }[] };
+    }
+    const stock = await this.getStockDashboard(kitchen._id.toString());
+    const low = stock.filter((s) => s.isLow);
+    return {
+      count: low.length,
+      items: low.slice(0, 10).map((s) => ({
+        name: s.name,
+        warehouseName: s.warehouseName,
+      })),
+    };
+  }
+
   async deductForOrder(orderId: string): Promise<void> {
     const order = await this.orderModel.findById(orderId).exec();
     if (!order) throw new NotFoundException('Không tìm thấy đơn');
@@ -1377,6 +1797,20 @@ export class InventoryService implements OnModuleInit {
 
     const aggregated = new Map<string, number>();
 
+    const ingredients = await this.ingredientModel.find().exec();
+    const ingById = new Map(ingredients.map((i) => [i._id.toString(), i]));
+
+    const lineMultiplier = (
+      ingredientId: string,
+      orderLine: { sugarPercent?: number; icePercent?: number },
+    ) => {
+      const ing = ingById.get(ingredientId);
+      const name = ing?.name?.toLowerCase() ?? '';
+      if (name.includes('đường')) return (orderLine.sugarPercent ?? 100) / 100;
+      if (name.includes('đá')) return (orderLine.icePercent ?? 100) / 100;
+      return 1;
+    };
+
     for (const item of order.items) {
       const recipe = await this.recipeModel
         .findOne({ menuItemId: item.menuItemId })
@@ -1388,7 +1822,8 @@ export class InventoryService implements OnModuleInit {
 
       for (const line of recipe.lines) {
         const id = line.ingredientId.toString();
-        const need = line.quantity * item.quantity;
+        const mult = lineMultiplier(id, item);
+        const need = line.quantity * item.quantity * mult;
         aggregated.set(id, (aggregated.get(id) ?? 0) + need);
       }
     }
@@ -1430,11 +1865,17 @@ export class InventoryService implements OnModuleInit {
       stockRequestId?: string;
       note?: string;
       movementDate?: Date;
+      expiryDate?: Date;
     },
+    opts?: { skipLotConsume?: boolean },
   ) {
     const wh = await this.getWarehouseOrThrow(warehouseId);
     const ing = await this.ingredientModel.findById(ingredientId).exec();
     if (!ing) throw new NotFoundException('Không tìm thấy nguyên liệu');
+
+    if (delta < 0 && !opts?.skipLotConsume) {
+      await this.consumeStockLotsFIFO(warehouseId, ingredientId, Math.abs(delta));
+    }
 
     const row = await this.getOrCreateWarehouseStock(wh._id, ing._id);
     const next = row.currentStock + delta;
@@ -1447,6 +1888,19 @@ export class InventoryService implements OnModuleInit {
     row.currentStock = next;
     await row.save();
     await this.syncIngredientTotalStock(ingredientId);
+
+    if (delta > 0 && meta.expiryDate && !opts?.skipLotConsume) {
+      await this.addStockLot(
+        warehouseId,
+        ingredientId,
+        delta,
+        meta.expiryDate,
+        {
+          supplierReceiptId: meta.supplierReceiptId,
+          stockRequestId: meta.stockRequestId,
+        },
+      );
+    }
 
     await this.movementModel.create({
       warehouseId: wh._id,
@@ -1463,6 +1917,159 @@ export class InventoryService implements OnModuleInit {
         : undefined,
       note: meta.note,
       movementDate: meta.movementDate ?? new Date(),
+    });
+  }
+
+  /** Báo cáo: tồn kho toàn bộ kho */
+  async getStockSnapshotReport() {
+    const warehouses = await this.findWarehouses();
+    const rows: {
+      warehouseCode: string;
+      warehouseName: string;
+      ingredientName: string;
+      category: string;
+      currentStock: number;
+      minStock: number;
+      displayStock: number;
+      displayMinStock: number;
+      displayUnit: string;
+      isLow: boolean;
+    }[] = [];
+
+    for (const wh of warehouses) {
+      const stock = await this.getStockDashboard(wh._id.toString());
+      for (const item of stock) {
+        rows.push({
+          warehouseCode: item.warehouseCode,
+          warehouseName: item.warehouseName,
+          ingredientName: item.name,
+          category: item.category,
+          currentStock: item.currentStock,
+          minStock: item.minStock,
+          displayStock: item.displayStock,
+          displayMinStock: item.displayMinStock,
+          displayUnit: item.displayUnit,
+          isLow: item.isLow,
+        });
+      }
+    }
+    return rows;
+  }
+
+  /** Báo cáo: nhật ký xuất nhập kho trong ngày */
+  async getMovementJournal(dateStr: string) {
+    const date = new Date(dateStr);
+    const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+
+    const movements = await this.movementModel
+      .find({ movementDate: { $gte: start, $lt: end } })
+      .sort({ createdAt: 1 })
+      .exec();
+
+    const [ingredients, warehouses] = await Promise.all([
+      this.ingredientModel.find().exec(),
+      this.warehouseModel.find().exec(),
+    ]);
+    const ingMap = new Map(ingredients.map((i) => [i._id.toString(), i]));
+    const whMap = new Map(warehouses.map((w) => [w._id.toString(), w]));
+
+    return movements.map((m) => {
+      const ing = ingMap.get(m.ingredientId.toString());
+      const wh = whMap.get(m.warehouseId.toString());
+      return {
+        time: (m.createdAt ?? m.movementDate ?? new Date()).toISOString(),
+        type: m.type,
+        typeLabel: STOCK_MOVEMENT_LABELS[m.type as StockMovementType] ?? m.type,
+        ingredientName: ing?.name ?? '—',
+        unit: ing?.unit ?? '',
+        warehouseCode: wh?.code ?? '',
+        warehouseName: wh?.name ?? '',
+        quantity: m.quantity,
+        balanceAfter: m.balanceAfter,
+        note: m.note,
+      };
+    });
+  }
+
+  /** Báo cáo: phiếu NCC trong ngày */
+  async getSupplierReceiptsForDate(dateStr: string) {
+    const date = new Date(dateStr);
+    const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    const end = new Date(start);
+    end.setDate(end.getDate() + 1);
+
+    const receipts = await this.receiptModel
+      .find({ documentDate: { $gte: start, $lt: end } })
+      .sort({ documentDate: 1 })
+      .exec();
+
+    const ingredients = await this.ingredientModel.find().exec();
+    const ingMap = new Map(ingredients.map((i) => [i._id.toString(), i]));
+
+    return receipts.map((r) => {
+      const lines = (r.lines ?? []).map((l) => {
+        const ing = ingMap.get(l.ingredientId.toString());
+        const lineTotal = (l.quantity ?? 0) * (l.unitPrice ?? 0);
+        return {
+          ingredientName: ing?.name ?? '—',
+          quantity: l.quantity,
+          unit: ing?.unit ?? '',
+          unitPrice: l.unitPrice ?? 0,
+          lineTotal,
+          expiryDate: l.expiryDate?.toISOString(),
+        };
+      });
+      const totalValue = lines.reduce((s, l) => s + l.lineTotal, 0);
+      return {
+        id: r._id.toString(),
+        documentNumber: r.documentNumber,
+        supplierName: r.supplierName,
+        documentDate: r.documentDate.toISOString(),
+        warehouseCode: r.warehouseCode,
+        warehouseName: r.warehouseName,
+        lineCount: lines.length,
+        totalValue,
+        lines,
+        note: r.note,
+        createdByName: r.createdByName,
+        createdAt: r.createdAt?.toISOString(),
+      };
+    });
+  }
+
+  /** Báo cáo: phiếu chuyển kho / cấp phát / hoàn trả theo ngày nghiệp vụ */
+  async getStockVouchersForDate(dateStr: string) {
+    const list = await this.stockRequestModel
+      .find({ businessDate: dateStr })
+      .sort({ createdAt: 1 })
+      .exec();
+    const ingredients = await this.ingredientModel.find().exec();
+    const ingMap = new Map(ingredients.map((i) => [i._id.toString(), i]));
+
+    return list.map((r) => {
+      const raw = r.toObject();
+      const lineSummary = (raw.lines ?? [])
+        .map((l: { ingredientId: Types.ObjectId; quantity: number }) => {
+          const ing = ingMap.get(l.ingredientId.toString());
+          return `${ing?.name ?? '?'}: ${l.quantity}${ing?.unit ?? ''}`;
+        })
+        .join('; ');
+      return {
+        requestNumber: raw.requestNumber,
+        type: raw.type,
+        status: raw.status,
+        fromWarehouse: raw.fromWarehouseName,
+        toWarehouse: raw.toWarehouseName,
+        permitDocumentNumber: raw.permitDocumentNumber,
+        businessDate: raw.businessDate,
+        parentRequestNumber: raw.parentRequestNumber,
+        requestedByName: raw.requestedByName,
+        reviewedByName: raw.reviewedByName,
+        lineSummary,
+        completedAt: raw.completedAt?.toISOString(),
+      };
     });
   }
 }

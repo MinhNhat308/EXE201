@@ -19,6 +19,46 @@ export class TenantSettings {
 
   @Prop({ default: 'Asia/Ho_Chi_Minh' })
   timezone?: string;
+
+  /** Hoàn tất wizard thiết lập lần đầu */
+  @Prop()
+  onboardingCompletedAt?: Date;
+
+  /** Solo: bật trừ kho theo công thức (false = chỉ quản lý hóa đơn) */
+  @Prop({ default: true })
+  trackInventory?: boolean;
+
+  /** POS Solo: hỏi % đường khi bán (công thức quán = 100%) */
+  @Prop({ default: true })
+  posSugarChoiceEnabled?: boolean;
+
+  /** POS Solo: hỏi % đá khi bán */
+  @Prop({ default: true })
+  posIceChoiceEnabled?: boolean;
+
+  /** Các mức % đường hiện trên POS (VD: 25, 50, 75, 100) */
+  @Prop({ type: [Number], default: [0, 25, 50, 75, 100] })
+  sugarLevels?: number[];
+
+  /** Các mức % đá hiện trên POS (VD: 20, 30, 60) */
+  @Prop({ type: [Number], default: [0, 25, 50, 75, 100] })
+  iceLevels?: number[];
+
+  /** MST / mã số thuế — in trên hóa đơn & báo cáo HĐĐT */
+  @Prop({ trim: true })
+  taxCode?: string;
+
+  /** Mẫu số hóa đơn (VD: 1C24TAA) */
+  @Prop({ trim: true })
+  invoiceTemplate?: string;
+
+  /** Ký hiệu hóa đơn (VD: AA/24E) */
+  @Prop({ trim: true })
+  invoiceSerial?: string;
+
+  /** Thuế GTGT % — mặc định 8 (F&B VN) */
+  @Prop({ default: 8 })
+  vatRate?: number;
 }
 
 export const TenantSettingsSchema = SchemaFactory.createForClass(TenantSettings);
@@ -30,6 +70,9 @@ export class Tenant {
 
   @Prop({ required: true, unique: true, lowercase: true, trim: true })
   slug: string;
+
+  @Prop({ enum: SubscriptionPlan })
+  intendedPlan?: SubscriptionPlan;
 
   @Prop({ required: true, enum: BusinessModel, default: BusinessModel.SMALL })
   businessModel: BusinessModel;
@@ -64,6 +107,7 @@ TenantSchema.set('toJSON', {
     storeName: ret.storeName,
     slug: ret.slug,
     businessModel: ret.businessModel,
+    intendedPlan: ret.intendedPlan,
     packageType: ret.packageType,
     status: ret.status,
     trialExpiredAt: ret.trialExpiredAt,

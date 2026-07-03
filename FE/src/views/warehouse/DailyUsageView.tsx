@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { InventoryController } from '@/controllers/inventory.controller';
+import { useBranchWarehouses } from '@/lib/use-branch-warehouses';
 import { DailyUsage } from '@/models/inventory.model';
 import {
   EmptyState,
@@ -12,23 +13,17 @@ import {
 import { WarehouseLayout } from './WarehouseLayout';
 
 export function DailyUsageView() {
+  const { warehouses, kitchenId, version } = useBranchWarehouses();
   const today = new Date().toISOString().slice(0, 10);
   const [date, setDate] = useState(today);
   const [warehouseId, setWarehouseId] = useState('');
-  const [warehouses, setWarehouses] = useState<
-    { id: string; code: string; name: string; isKitchenSource?: boolean }[]
-  >([]);
   const [usage, setUsage] = useState<DailyUsage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    InventoryController.getWarehouses().then((whs) => {
-      setWarehouses(whs);
-      const kho1 = whs.find((w) => w.isKitchenSource) ?? whs[0];
-      if (kho1) setWarehouseId(kho1.id);
-    });
-  }, []);
+    setWarehouseId(kitchenId ?? warehouses[0]?.id ?? '');
+  }, [kitchenId, warehouses, version]);
 
   const load = useCallback(async () => {
     setLoading(true);

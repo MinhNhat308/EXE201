@@ -9,6 +9,7 @@ import { BRAND } from '@/lib/brand';
 import { usePolling } from '@/lib/use-polling';
 
 import { OrderController } from '@/controllers/order.controller';
+import { useActiveBranch } from '@/lib/use-active-branch';
 
 import { formatCurrency } from '@/lib/format';
 
@@ -34,6 +35,7 @@ import { ManagerLayout } from './ManagerLayout';
 
 export function ManagerOrdersView() {
 
+  const { branchId, isChain, version } = useActiveBranch();
   const [orders, setOrders] = useState<Order[]>([]);
 
   const [loading, setLoading] = useState(true);
@@ -54,6 +56,10 @@ export function ManagerOrdersView() {
 
         false,
 
+        isChain ? branchId : undefined,
+
+        true,
+
       );
 
       setOrders(data);
@@ -68,7 +74,7 @@ export function ManagerOrdersView() {
 
     }
 
-  }, [shift]);
+  }, [shift, isChain, branchId, version]);
 
 
 

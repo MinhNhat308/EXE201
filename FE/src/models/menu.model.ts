@@ -24,4 +24,8 @@ export interface CartItem {
   price: number;
   quantity: number;
   note?: string;
+  /** % đường khách chọn — công thức quán = 100% */
+  sugarPercent?: number;
+  /** % đá khách chọn */
+  icePercent?: number;
 }

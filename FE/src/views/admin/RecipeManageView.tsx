@@ -134,7 +134,7 @@ export function RecipeManageView() {
                       <button
                         type="button"
                         onClick={() => openEdit(item)}
-                        className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-amber-600"
+                        className="rounded-lg bg-[#2F80ED] px-3 py-1.5 text-xs font-medium text-white hover:bg-[#2569c7]"
                       >
                         Sửa công thức
                       </button>
@@ -226,7 +226,7 @@ export function RecipeManageView() {
               </button>
               <button
                 type="submit"
-                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600"
+                className="rounded-lg bg-[#2F80ED] px-4 py-2 hover:bg-[#2569c7] text-sm font-medium text-white hover:bg-[#2569c7]"
               >
                 Lưu
               </button>

@@ -10,6 +10,11 @@ import { SubscriptionPlan } from '../../common/enums/subscription-plan.enum';
 import { TenantStatus } from '../../common/enums/tenant-status.enum';
 import { TRIAL_DAYS } from '../../common/saas/plan-limits';
 import { Tenant, TenantDocument } from './schemas/tenant.schema';
+import {
+  normalizePercentLevels,
+  DEFAULT_ICE_LEVELS,
+  DEFAULT_SUGAR_LEVELS,
+} from '../../common/saas/sugar-ice-levels';
 
 export function slugifyStoreName(name: string): string {
   return name
@@ -43,8 +48,8 @@ export class TenantsService {
 
   async createTrialTenant(input: {
     storeName: string;
+    intendedPlan: SubscriptionPlan;
     businessModel: BusinessModel;
-    suggestedPlan: SubscriptionPlan;
     phone?: string;
   }): Promise<TenantDocument> {
     let slug = slugifyStoreName(input.storeName);
@@ -60,6 +65,7 @@ export class TenantsService {
     const tenant = new this.tenantModel({
       storeName: input.storeName.trim(),
       slug,
+      intendedPlan: input.intendedPlan,
       businessModel: input.businessModel,
       packageType: SubscriptionPlan.PREMIUM,
       status: TenantStatus.TRIAL,
@@ -111,5 +117,80 @@ export class TenantsService {
     if (!tenant.trialExpiredAt) return 0;
     const diff = tenant.trialExpiredAt.getTime() - Date.now();
     return Math.max(0, Math.ceil(diff / (1000 * 60 * 60 * 24)));
+  }
+
+  async markOnboardingComplete(tenantId: string): Promise<TenantDocument> {
+    const tenant = await this.findById(tenantId);
+    tenant.settings = tenant.settings ?? {};
+    tenant.settings.onboardingCompletedAt = new Date();
+    tenant.markModified('settings');
+    await tenant.save();
+    return tenant;
+  }
+
+  async updateProfile(
+    tenantId: string,
+    input: {
+      storeName?: string;
+      trackInventory?: boolean;
+      posSugarChoiceEnabled?: boolean;
+      posIceChoiceEnabled?: boolean;
+      sugarLevels?: number[];
+      iceLevels?: number[];
+      taxCode?: string;
+      invoiceTemplate?: string;
+      invoiceSerial?: string;
+      vatRate?: number;
+      address?: string;
+      phone?: string;
+    },
+  ): Promise<TenantDocument> {
+    const tenant = await this.findById(tenantId);
+    tenant.settings = tenant.settings ?? {};
+    if (input.storeName?.trim()) {
+      tenant.storeName = input.storeName.trim();
+    }
+    if (input.trackInventory !== undefined) {
+      tenant.settings.trackInventory = input.trackInventory;
+    }
+    if (input.posSugarChoiceEnabled !== undefined) {
+      tenant.settings.posSugarChoiceEnabled = input.posSugarChoiceEnabled;
+    }
+    if (input.posIceChoiceEnabled !== undefined) {
+      tenant.settings.posIceChoiceEnabled = input.posIceChoiceEnabled;
+    }
+    if (input.sugarLevels !== undefined) {
+      tenant.settings.sugarLevels = normalizePercentLevels(
+        input.sugarLevels,
+        DEFAULT_SUGAR_LEVELS,
+      );
+    }
+    if (input.iceLevels !== undefined) {
+      tenant.settings.iceLevels = normalizePercentLevels(
+        input.iceLevels,
+        DEFAULT_ICE_LEVELS,
+      );
+    }
+    if (input.taxCode !== undefined) {
+      tenant.settings.taxCode = input.taxCode.trim() || undefined;
+    }
+    if (input.invoiceTemplate !== undefined) {
+      tenant.settings.invoiceTemplate = input.invoiceTemplate.trim() || undefined;
+    }
+    if (input.invoiceSerial !== undefined) {
+      tenant.settings.invoiceSerial = input.invoiceSerial.trim() || undefined;
+    }
+    if (input.vatRate !== undefined) {
+      tenant.settings.vatRate = input.vatRate;
+    }
+    if (input.address !== undefined) {
+      tenant.settings.address = input.address.trim() || undefined;
+    }
+    if (input.phone !== undefined) {
+      tenant.settings.phone = input.phone.trim() || undefined;
+    }
+    tenant.markModified('settings');
+    await tenant.save();
+    return tenant;
   }
 }

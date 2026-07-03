@@ -2,6 +2,7 @@
 
 import { formatToppingsLabel } from '@/lib/cart';
 import { formatCurrency } from '@/lib/format';
+import { formatSugarIceLine } from '@/lib/sugar-ice';
 import { Order } from '@/models/order.model';
 
 export function OrderBillDetail({ order }: { order: Order }) {
@@ -49,6 +50,14 @@ export function OrderBillDetail({ order }: { order: Order }) {
                 <p className="text-xs text-violet-600">
                   + {formatToppingsLabel(item.toppings)}
                 </p>
+              )}
+              {(item.sugarPercent != null || item.icePercent != null) && (
+                <p className="text-xs font-medium text-emerald-700">
+                  {formatSugarIceLine(item.sugarPercent, item.icePercent)}
+                </p>
+              )}
+              {item.note?.trim() && (
+                <p className="text-xs text-amber-700">📝 {item.note}</p>
               )}
             </div>
             <p className="shrink-0 font-semibold">

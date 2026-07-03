@@ -1,4 +1,4 @@
-import { IsBoolean, IsNumber, IsOptional, IsString } from 'class-validator';
+import { IsBoolean, IsNumber, IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdatePaymentMethodDto {
   @IsOptional()
@@ -20,4 +20,14 @@ export class UpdatePaymentMethodDto {
   @IsOptional()
   @IsNumber()
   sortOrder?: number;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(600_000)
+  qrImageUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  bankAccountInfo?: string;
 }

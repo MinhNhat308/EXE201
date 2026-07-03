@@ -3,12 +3,14 @@
 import Link from 'next/link';
 import { useCallback, useEffect, useState } from 'react';
 import { usePolling } from '@/lib/use-polling';
+import { formatCurrency } from '@/lib/format';
 import { InventoryController } from '@/controllers/inventory.controller';
+import { useActiveBranch } from '@/lib/use-active-branch';
+import { useBranchWarehouses } from '@/lib/use-branch-warehouses';
 import { WarehouseOverview } from '@/models/inventory.model';
 import {
   CATEGORY_ORDER,
   INGREDIENT_CATEGORY_LABELS,
-  IngredientCategory,
 } from '@/models/ingredient-category.model';
 import { StockRequestStatus } from '@/models/stock-request.model';
 import {
@@ -52,14 +54,24 @@ const MODULES = [
 ];
 
 export function WarehouseHomeView() {
+  const { branchId, version } = useActiveBranch();
+  const { warehouses, kitchenId, centralId } = useBranchWarehouses();
   const [overview, setOverview] = useState<WarehouseOverview | null>(null);
   const [loading, setLoading] = useState(true);
   const [warehouseId, setWarehouseId] = useState('');
   const [pendingCount, setPendingCount] = useState(0);
 
+  useEffect(() => {
+    setWarehouseId(kitchenId ?? centralId ?? '');
+  }, [kitchenId, centralId, branchId, version]);
+
   const loadOverview = useCallback(async () => {
     try {
-      const data = await InventoryController.getOverview(warehouseId || undefined);
+      const data = await InventoryController.getOverview(
+        warehouseId || undefined,
+        branchId,
+        true,
+      );
       setOverview(data);
       if (!warehouseId && data.warehouseId) setWarehouseId(data.warehouseId);
     } catch {
@@ -67,18 +79,22 @@ export function WarehouseHomeView() {
     } finally {
       setLoading(false);
     }
-  }, [warehouseId]);
+  }, [warehouseId, branchId, version]);
 
   const loadPending = useCallback(async () => {
     try {
-      const pending = await InventoryController.getStockRequests({
-        status: StockRequestStatus.PENDING,
-      });
+      const pending = await InventoryController.getStockRequests(
+        {
+          status: StockRequestStatus.PENDING,
+          branchId,
+        },
+        true,
+      );
       setPendingCount(pending.length);
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [branchId, version]);
 
   useEffect(() => {
     setLoading(true);
@@ -131,7 +147,7 @@ export function WarehouseHomeView() {
           <LoadingGrid />
         ) : overview ? (
           <>
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-6">
               <StatCard
                 label="Cảnh báo tồn thấp"
                 value={overview.lowCount}
@@ -155,6 +171,18 @@ export function WarehouseHomeView() {
                 label="Phiếu NCC hôm nay"
                 value={overview.todayReceiptCount}
                 icon="📥"
+              />
+              <StatCard
+                label="Giá trị NCC hôm nay"
+                value={formatCurrency(overview.todayReceiptValue ?? 0)}
+                icon="💰"
+                tone="info"
+              />
+              <StatCard
+                label="NCC tháng này"
+                value={formatCurrency(overview.monthReceiptValue ?? 0)}
+                icon="📊"
+                hint={`${overview.monthReceiptCount ?? 0} phiếu`}
               />
             </div>
 

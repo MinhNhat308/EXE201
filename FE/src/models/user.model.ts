@@ -58,6 +58,8 @@ export interface User {
 
   isActive?: boolean;
 
+  branchId?: string;
+
   createdAt?: string;
 
   updatedAt?: string;

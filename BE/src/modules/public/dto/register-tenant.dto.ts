@@ -6,15 +6,16 @@ import {
   IsString,
   MinLength,
 } from 'class-validator';
-import { BusinessModel } from '../../../common/enums/business-model.enum';
+import { SubscriptionPlan } from '../../../common/enums/subscription-plan.enum';
 
 export class RegisterTenantDto {
   @IsString()
   @IsNotEmpty()
   storeName: string;
 
-  @IsEnum(BusinessModel)
-  businessModel: BusinessModel;
+  /** Gói mục tiêu sau trial: Solo · Store · Chain */
+  @IsEnum(SubscriptionPlan)
+  intendedPlan: SubscriptionPlan;
 
   @IsString()
   @IsNotEmpty()

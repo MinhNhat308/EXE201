@@ -21,6 +21,7 @@ import {
   StockTransferRequest,
   StockTransferRequestSchema,
 } from './schemas/stock-transfer-request.schema';
+import { StockLot, StockLotSchema } from './schemas/stock-lot.schema';
 import { User, UserSchema } from '../users/schemas/user.schema';
 import { InventoryController } from './inventory.controller';
 import { InventoryService } from './inventory.service';
@@ -36,6 +37,7 @@ import { InventoryService } from './inventory.service';
       { name: WarehouseLocation.name, schema: WarehouseLocationSchema },
       { name: WarehouseStock.name, schema: WarehouseStockSchema },
       { name: StockTransferRequest.name, schema: StockTransferRequestSchema },
+      { name: StockLot.name, schema: StockLotSchema },
       { name: MenuItem.name, schema: MenuItemSchema },
       { name: Order.name, schema: OrderSchema },
     ]),

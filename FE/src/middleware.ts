@@ -17,10 +17,6 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(new URL('/login', request.url));
   }
 
-  if (pathname === '/login' && token) {
-    return NextResponse.redirect(new URL('/dashboard/admin', request.url));
-  }
-
   if (!publicPaths.has(pathname) && !isProtected) {
     return NextResponse.next();
   }
@@ -29,5 +25,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/', '/pricing', '/register', '/dashboard/:path*', '/admin/:path*', '/login'],
+  matcher: ['/', '/pricing', '/register', '/dashboard', '/dashboard/:path*', '/admin/:path*', '/login'],
 };

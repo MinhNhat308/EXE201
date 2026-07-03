@@ -4,24 +4,21 @@ import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { BRAND } from '@/lib/brand';
 import { getSubscriptionStatus, isSubscriptionExpired, getStoredUser } from '@/lib/auth-storage';
-import { syncSessionFromServer } from '@/lib/sync-session';
 import { Role } from '@/models/user.model';
 
 export function ExpiredOverlay() {
   const [expired, setExpired] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
 
-  const applyLocal = () => {
-    setExpired(isSubscriptionExpired());
-    const user = getStoredUser<{ role: Role }>();
-    setIsAdmin(user?.role === Role.ADMIN);
-  };
-
   useEffect(() => {
+    const applyLocal = () => {
+      setExpired(isSubscriptionExpired());
+      const user = getStoredUser<{ role: Role }>();
+      setIsAdmin(user?.role === Role.ADMIN);
+    };
     applyLocal();
-    syncSessionFromServer().then((ok) => {
-      if (ok) applyLocal();
-    });
+    const id = window.setInterval(applyLocal, 30_000);
+    return () => window.clearInterval(id);
   }, []);
 
   if (!expired) return null;

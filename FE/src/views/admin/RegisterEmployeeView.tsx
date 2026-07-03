@@ -187,7 +187,7 @@ export function RegisterEmployeeView() {
           <button
             type="submit"
             disabled={submitting}
-            className="mt-6 w-full rounded-lg bg-amber-500 py-2.5 font-semibold text-white hover:bg-amber-600 disabled:opacity-60"
+            className="mt-6 w-full rounded-lg bg-[#2F80ED] py-2.5 font-semibold text-white hover:bg-[#2569c7] disabled:opacity-60"
           >
             {submitting ? 'Đang đăng ký...' : 'Đăng ký nhân viên'}
           </button>

@@ -64,6 +64,9 @@ export class User {
 
 
 
+  @Prop({ type: Types.ObjectId, ref: 'Branch' })
+  branchId?: Types.ObjectId;
+
   @Prop({ default: true })
 
   isActive: boolean;
@@ -117,6 +120,8 @@ UserSchema.set('toJSON', {
       username: ret.username,
 
       role: ret.role,
+
+      branchId: ret.branchId?.toString(),
 
       phone: ret.phone,
 

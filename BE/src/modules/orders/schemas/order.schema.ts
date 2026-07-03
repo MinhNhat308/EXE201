@@ -29,6 +29,14 @@ export class OrderLineItem {
 
   @Prop()
   note?: string;
+
+  /** % đường khách chọn (10–100, 0 = không); công thức quán = 100% */
+  @Prop()
+  sugarPercent?: number;
+
+  /** % đá khách chọn */
+  @Prop()
+  icePercent?: number;
 }
 
 export const OrderLineItemSchema = SchemaFactory.createForClass(OrderLineItem);
@@ -119,6 +127,8 @@ OrderSchema.set('toJSON', {
         price: item.price,
         quantity: item.quantity,
         note: item.note,
+        sugarPercent: item.sugarPercent,
+        icePercent: item.icePercent,
       }),
     ),
     customerName: ret.customerName,

@@ -26,6 +26,18 @@ export class Recipe {
   @Prop({ type: [RecipeLineSchema], default: [] })
   lines: RecipeLine[];
 
+  /** Định lượng % (10–100) — sữa, trà, topping cơ bản */
+  @Prop({ default: 80, min: 0, max: 100 })
+  intensityPercent: number;
+
+  /** Mức đường mặc định cho món (0 = không đường) */
+  @Prop({ default: 80, min: 0, max: 100 })
+  sugarPercent: number;
+
+  /** Mức đá mặc định cho món (0 = không đá) */
+  @Prop({ default: 80, min: 0, max: 100 })
+  icePercent: number;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -39,6 +51,9 @@ RecipeSchema.set('toJSON', {
   transform: (_doc, ret) => ({
     id: ret._id?.toString(),
     menuItemId: ret.menuItemId?.toString(),
+    intensityPercent: ret.intensityPercent ?? 80,
+    sugarPercent: ret.sugarPercent ?? 80,
+    icePercent: ret.icePercent ?? 80,
     lines: ret.lines?.map((l: RecipeLine & { ingredientId?: { toString(): string } }) => ({
       ingredientId: l.ingredientId?.toString?.() ?? l.ingredientId,
       quantity: l.quantity,

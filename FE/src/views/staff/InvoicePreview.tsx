@@ -2,10 +2,12 @@
 
 import { OrderLineItem } from '@/models/order.model';
 import { formatToppingsLabel } from '@/lib/cart';
+import { formatSugarIceLine } from '@/lib/sugar-ice';
 import { WORK_SHIFT_LABELS, WorkShift } from '@/models/staff.model';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 
 interface InvoicePreviewProps {
+  storeName?: string;
   invoiceNumber?: string;
   orderNumber?: string;
   items: OrderLineItem[];
@@ -15,6 +17,8 @@ interface InvoicePreviewProps {
   note?: string;
   paymentMethod?: string;
   paymentMethodLabel?: string;
+  paymentQrImageUrl?: string;
+  paymentBankInfo?: string;
   workShift?: WorkShift;
   staffName?: string;
   subtotal: number;
@@ -24,6 +28,7 @@ interface InvoicePreviewProps {
 }
 
 export function InvoicePreview({
+  storeName,
   invoiceNumber,
   orderNumber,
   items,
@@ -33,6 +38,8 @@ export function InvoicePreview({
   note,
   paymentMethod,
   paymentMethodLabel,
+  paymentQrImageUrl,
+  paymentBankInfo,
   workShift,
   staffName,
   subtotal,
@@ -46,7 +53,9 @@ export function InvoicePreview({
       className={`rounded-xl border border-stone-200 bg-white p-6 ${printable ? 'print-invoice' : ''}`}
     >
       <div className="border-b border-dashed border-stone-300 pb-4 text-center">
-        <p className="text-xl font-bold text-stone-800">🧋 Bubble Tea Shop</p>
+        <p className="text-xl font-bold text-stone-800">
+          {storeName ? `🧋 ${storeName}` : '🧋 Bubble Tea Shop'}
+        </p>
         <p className="text-sm text-stone-500">Hóa đơn bán hàng</p>
         {invoiceNumber && (
           <p className="mt-2 font-mono text-sm font-semibold text-amber-700">
@@ -69,6 +78,20 @@ export function InvoicePreview({
         {paymentMethod && (
           <p>Thanh toán: {paymentMethodLabel ?? paymentMethod}</p>
         )}
+        {paymentMethod === 'BANK_TRANSFER' && paymentQrImageUrl && (
+          <div className="mt-3 text-center print:block">
+            <p className="text-xs text-stone-500">Quét QR chuyển khoản</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={paymentQrImageUrl}
+              alt="QR"
+              className="mx-auto mt-1 max-h-36 object-contain print:max-h-40"
+            />
+            {paymentBankInfo && (
+              <p className="mt-1 text-xs text-stone-600">{paymentBankInfo}</p>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="py-4">
@@ -88,6 +111,12 @@ export function InvoicePreview({
                   {item.toppings?.length > 0 && (
                     <span className="block text-xs text-violet-600">
                       + {formatToppingsLabel(item.toppings)}
+                    </span>
+                  )}
+                  {item.sugarPercent != null &&
+                    (item.sugarPercent !== 100 || (item.icePercent ?? 100) !== 100) && (
+                    <span className="block text-xs text-sky-600">
+                      {formatSugarIceLine(item.sugarPercent, item.icePercent)}
                     </span>
                   )}
                   {item.note && (

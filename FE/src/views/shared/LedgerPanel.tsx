@@ -2,28 +2,33 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { InventoryController } from '@/controllers/inventory.controller';
+import { useActiveBranch } from '@/lib/use-active-branch';
+import { formatCurrency } from '@/lib/format';
 import { SupplierReceipt } from '@/models/inventory.model';
 import {
   STOCK_REQUEST_TYPE_LABELS,
   StockTransferRequest,
 } from '@/models/stock-request.model';
-import { EmptyState, StatCard } from '@/views/inventory/inventory-ui';
+import { StatCard, EmptyState } from '@/views/inventory/inventory-ui';
+import { SupplierReceiptList } from '@/views/shared/SupplierReceiptList';
 
 export function LedgerPanel() {
+  const { branchId, version } = useActiveBranch();
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
   const [receipts, setReceipts] = useState<SupplierReceipt[]>([]);
   const [requests, setRequests] = useState<StockTransferRequest[]>([]);
   const [summary, setSummary] = useState({
     supplierReceiptCount: 0,
     completedRequestCount: 0,
+    supplierReceiptTotalValue: 0,
   });
 
   const load = useCallback(async () => {
-    const data = await InventoryController.getLedger(month);
+    const data = await InventoryController.getLedger(month, branchId, true);
     setReceipts(data.supplierReceipts);
     setRequests(data.stockRequests);
     setSummary(data.summary);
-  }, [month]);
+  }, [month, branchId, version]);
 
   useEffect(() => {
     load();
@@ -44,11 +49,17 @@ export function LedgerPanel() {
         </label>
       </div>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid gap-4 sm:grid-cols-3">
         <StatCard
           label="Phiếu NCC (kho tổng)"
           value={summary.supplierReceiptCount}
           icon="📥"
+          tone="info"
+        />
+        <StatCard
+          label="Giá trị nhập NCC"
+          value={formatCurrency(summary.supplierReceiptTotalValue ?? 0)}
+          icon="💰"
           tone="info"
         />
         <StatCard
@@ -67,29 +78,11 @@ export function LedgerPanel() {
             </span>
             Nhập nhà cung cấp
           </h2>
-          <div className="space-y-3">
-            {receipts.map((r) => (
-              <div
-                key={r.id}
-                className="rounded-2xl border border-blue-100 bg-gradient-to-br from-blue-50/80 to-white p-4 shadow-sm"
-              >
-                <div className="flex justify-between gap-2">
-                  <p className="font-semibold text-stone-900">{r.supplierName}</p>
-                  <span className="shrink-0 rounded-full bg-blue-600 px-2.5 py-0.5 text-[10px] font-bold uppercase text-white">
-                    NCC
-                  </span>
-                </div>
-                <p className="mt-1 font-mono text-sm text-blue-800">CT {r.documentNumber}</p>
-                <p className="mt-2 text-xs text-stone-500">
-                  {r.warehouseCode} · {new Date(r.documentDate).toLocaleDateString('vi-VN')}
-                  {r.createdByName ? ` · ${r.createdByName}` : ''}
-                </p>
-              </div>
-            ))}
-            {!receipts.length && (
-              <EmptyState icon="📭" title="Không có phiếu NCC trong tháng" />
-            )}
-          </div>
+          <SupplierReceiptList
+            receipts={receipts}
+            emptyTitle="Không có phiếu NCC trong tháng"
+            emptyHint=""
+          />
         </section>
 
         <section>

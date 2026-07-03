@@ -7,6 +7,7 @@ import {
   UpdateOrderPayload,
 } from '@/models/order.model';
 import { WorkShift } from '@/models/staff.model';
+import type { TodayReport } from '@/models/today-report.model';
 
 export const MenuController = {
   getItems(): Promise<MenuItem[]> {
@@ -20,10 +21,30 @@ export const MenuController = {
 export const PaymentMethodController = {
   getActive() {
     return apiRequest<
-      { id: string; code: string; label: string; description?: string }[]
+      {
+        id: string;
+        code: string;
+        label: string;
+        description?: string;
+        bankAccountInfo?: string;
+      }[]
     >('/payment-methods?activeOnly=true', {
       auth: true,
       cacheTtlMs: 120_000,
+    });
+  },
+
+  getByCode(code: string) {
+    return apiRequest<{
+      id: string;
+      code: string;
+      label: string;
+      description?: string;
+      qrImageUrl?: string;
+      bankAccountInfo?: string;
+    } | null>(`/payment-methods/by-code/${encodeURIComponent(code)}`, {
+      auth: true,
+      cacheTtlMs: 300_000,
     });
   },
 };
@@ -37,12 +58,17 @@ export const OrderController = {
     });
   },
 
-  getToday(workShift?: WorkShift, activeOnly = false): Promise<Order[]> {
+  getToday(workShift?: WorkShift, activeOnly = false, branchId?: string, skipCache = false): Promise<Order[]> {
     const params = new URLSearchParams();
     if (workShift) params.set('workShift', workShift);
     if (activeOnly) params.set('activeOnly', 'true');
+    if (branchId) params.set('branchId', branchId);
     const q = params.toString() ? `?${params}` : '';
-    return apiRequest<Order[]>(`/orders/today${q}`, { auth: true });
+    return apiRequest<Order[]>(`/orders/today${q}`, {
+      auth: true,
+      cacheTtlMs: 20_000,
+      skipCache,
+    });
   },
 
   getById(id: string): Promise<Order> {
@@ -83,6 +109,14 @@ export const OrderController = {
       method: 'PATCH',
       auth: true,
       body: JSON.stringify({ status }),
+    });
+  },
+
+  getTodayReport(workShift?: WorkShift) {
+    const q = workShift ? `?workShift=${workShift}` : '';
+    return apiRequest<TodayReport>(`/orders/reports/today${q}`, {
+      auth: true,
+      cacheTtlMs: 30_000,
     });
   },
 };

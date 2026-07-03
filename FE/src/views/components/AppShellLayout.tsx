@@ -7,17 +7,24 @@ import { ReactNode, useEffect, useMemo, useState } from 'react';
 import { AuthController } from '@/controllers/auth.controller';
 import { BRAND, BRAND_LOGO } from '@/lib/brand';
 import { filterNavByPlan, OWNER_NAV_SECTIONS } from '@/lib/dashboard-nav';
+import { hydrateAuthFromServer } from '@/lib/auth-hydrate';
 import {
   getStoredPlan,
   getStoredSubscription,
   getStoredUser,
   getSubscriptionStatus,
+  getStoredTenant,
 } from '@/lib/auth-storage';
 import { SaasFeature } from '@/models/saas-feature.model';
 import { FeatureGate } from '@/views/subscription/FeatureGate';
 import { Role, User } from '@/models/user.model';
-import { TrialBanner } from '@/views/subscription/TrialBanner';
+import { BranchSwitcher } from '@/views/components/BranchSwitcher';
+import { BranchScopeBanner } from '@/views/components/BranchScopeBanner';
+import { PageLoading } from '@/views/components/app-ui';
+import { isChainOperatingPlan } from '@/lib/workspace-routes';
+import { TenantInfo } from '@/models/tenant.model';
 import { ExpiredOverlay } from '@/views/subscription/ExpiredOverlay';
+import { TrialBanner } from '@/views/subscription/TrialBanner';
 
 export type NavItem = {
   href: string;
@@ -63,43 +70,55 @@ export function AppShellLayout({
   const roleSections: NavSection[] =
     navSections ?? (navItems ? [{ label: 'Menu', items: navItems }] : []);
 
+  const permittedRolesKey = permitted.join('|');
+
   useEffect(() => {
-    const stored = getStoredUser<User>();
-    if (!stored || !permitted.includes(stored.role)) {
-      router.replace('/login');
-      return;
-    }
-    setUser((prev) => {
-      if (prev && prev.email === stored.email) return prev;
-      return stored;
-    });
-  }, [router, permitted.join('|')]);
+    let cancelled = false;
+
+    void (async () => {
+      let stored = getStoredUser<User>();
+      if (!stored) {
+        stored = await hydrateAuthFromServer();
+      }
+      if (cancelled) return;
+      if (!stored || !permitted.includes(stored.role)) {
+        router.replace('/login');
+        return;
+      }
+      setUser((prev) => {
+        if (prev && prev.email === stored!.email) return prev;
+        return stored!;
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [router, permitted, permittedRolesKey]);
 
   const logout = () => {
     AuthController.logout();
     router.replace('/login');
   };
 
-  if (!user) {
-    return (
-      <div className={`flex min-h-screen items-center justify-center ${BRAND.pageBg}`}>
-        <div className={`h-11 w-11 animate-spin rounded-full border-4 ${BRAND.spinner}`} />
-      </div>
-    );
-  }
+  if (!user) return <PageLoading />;
 
   const isOwner = user.role === Role.ADMIN;
   const sub = getStoredSubscription<{ plan?: string }>();
   const plan = getStoredPlan() ?? sub?.plan ?? 'STANDARD';
   const subStatus = getSubscriptionStatus() ?? 'ACTIVE';
+  const tenant = getStoredTenant<TenantInfo>();
+  const isChain = isChainOperatingPlan(tenant, plan);
   const sections = isOwner
     ? filterNavByPlan(ownerNavSections, plan, subStatus)
     : roleSections;
-  const badge = isOwner ? 'Chủ cửa hàng' : roleBadge;
+  const badge = isOwner ? (isChain ? 'Chủ chuỗi' : 'Chủ cửa hàng') : roleBadge;
 
   return (
     <div className={`flex min-h-screen ${BRAND.pageBg}`}>
-      <aside className="relative flex w-[17.5rem] shrink-0 flex-col border-r border-white/10 bg-gradient-to-b from-slate-950 via-[#163a6e] to-slate-950 text-white shadow-[4px_0_24px_rgba(15,23,42,0.12)]">
+      <aside
+        className={`relative flex w-[17.5rem] shrink-0 flex-col border-r border-white/10 text-white shadow-[4px_0_24px_rgba(15,23,42,0.15)] ${BRAND.sidebarBg}`}
+      >
         <div className="border-b border-white/10 px-5 py-5">
           <div className="flex items-center gap-3">
             <Image
@@ -134,15 +153,18 @@ export function AppShellLayout({
                       key={item.href}
                       href={item.href}
                       className={`relative flex items-center rounded-xl px-3 py-2.5 text-[13px] font-medium transition-all duration-200 ${
-                        active
-                          ? 'bg-white/12 text-white shadow-inner'
-                          : 'text-white/70 hover:bg-white/[0.06] hover:text-white'
+                        active ? BRAND.navActive : BRAND.navIdle
                       }`}
                     >
                       {active && (
-                        <span className="absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full bg-[#5B9FED]" />
+                        <span
+                          className={`absolute left-0 top-1/2 h-5 w-0.5 -translate-y-1/2 rounded-full ${BRAND.navIndicator}`}
+                        />
                       )}
-                      <span className={active ? 'pl-2' : ''}>{item.label}</span>
+                      <span className={active ? 'pl-2' : ''}>
+                        {item.icon ? `${item.icon} ` : ''}
+                        {item.label}
+                      </span>
                     </Link>
                   );
                 })}
@@ -155,6 +177,11 @@ export function AppShellLayout({
           <div className="rounded-xl bg-white/[0.06] px-3 py-2.5 ring-1 ring-white/10">
             <p className="truncate text-sm font-medium">{user.fullName}</p>
             <p className="truncate text-xs text-white/50">{user.email}</p>
+            {isOwner && isChain && (
+              <div className="mt-2 border-t border-white/10 pt-2">
+                <BranchSwitcher />
+              </div>
+            )}
           </div>
           <button
             type="button"
@@ -168,6 +195,7 @@ export function AppShellLayout({
 
       <div className="flex min-w-0 flex-1 flex-col">
         <TrialBanner />
+        {isOwner && isChain && <BranchScopeBanner />}
         <div className="relative min-w-0 flex-1">
           <main className={mainClassName}>
             <FeatureGate>{children}</FeatureGate>

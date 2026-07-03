@@ -1,3 +1,5 @@
+import { clearAllBranchSelections } from '@/lib/branch-storage';
+
 const TOKEN_KEY = 'auth_token';
 
 const USER_KEY = 'auth_user';
@@ -64,18 +66,33 @@ export function saveAuth(
 
   if (extras?.status) localStorage.setItem(STATUS_KEY, extras.status);
 
-  document.cookie = `auth_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax`;
+  const secure =
+    typeof window !== 'undefined' && window.location.protocol === 'https:'
+      ? '; Secure'
+      : '';
+  document.cookie = `auth_token=${token}; path=/; max-age=${60 * 60 * 24 * 7}; SameSite=Lax${secure}`;
+
 
 }
 
 
 
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  const match = document.cookie.match(new RegExp(`(?:^|; )${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}=([^;]*)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
 export function getToken(): string | null {
-
   if (typeof window === 'undefined') return null;
-
-  return localStorage.getItem(TOKEN_KEY);
-
+  const fromStorage = localStorage.getItem(TOKEN_KEY);
+  if (fromStorage) return fromStorage;
+  const fromCookie = readCookie('auth_token');
+  if (fromCookie) {
+    localStorage.setItem(TOKEN_KEY, fromCookie);
+    return fromCookie;
+  }
+  return null;
 }
 
 
@@ -119,6 +136,20 @@ export function getStoredTenant<T>(): T | null {
     return null;
 
   }
+
+}
+
+
+
+export function updateStoredTenant(patch: object) {
+
+  if (typeof window === 'undefined') return;
+
+  const current = getStoredTenant<Record<string, unknown>>();
+
+  if (!current) return;
+
+  localStorage.setItem(TENANT_KEY, JSON.stringify({ ...current, ...patch }));
 
 }
 
@@ -201,6 +232,8 @@ export function clearAuth() {
   localStorage.removeItem(PLAN_KEY);
 
   localStorage.removeItem(STATUS_KEY);
+
+  clearAllBranchSelections();
 
   document.cookie = 'auth_token=; path=/; max-age=0';
 

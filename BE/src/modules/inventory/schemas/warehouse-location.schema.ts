@@ -55,5 +55,6 @@ WarehouseLocationSchema.set('toJSON', {
     isActive: ret.isActive,
     isKitchenSource: ret.isKitchenSource,
     isCentralWarehouse: ret.isCentralWarehouse,
+    branchId: ret.branchId?.toString(),
   }),
 });

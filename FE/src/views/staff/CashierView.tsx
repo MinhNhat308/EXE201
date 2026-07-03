@@ -1,28 +1,31 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   MenuController,
   OrderController,
   PaymentMethodController,
 } from '@/controllers/order.controller';
-import { AuthController } from '@/controllers/auth.controller';
-import { getStoredUser } from '@/lib/auth-storage';
+import { getStoredTenant, getStoredUser } from '@/lib/auth-storage';
 import { canAccessRole, isStoreOwner } from '@/lib/role-access';
+import {
+  isSoloOperatingPlan,
+  SOLO_HUB_PATH,
+  SOLO_SALES_PATH,
+  SOLO_SETTINGS_PATH,
+  STORE_CASHIER_ORDERS_PATH,
+  STORE_CHECK_IN_PATH,
+} from '@/lib/workspace-routes';
 import {
   buildCartLine,
   cartSubtotal,
   findMatchingLine,
 } from '@/lib/cart';
 import { formatCurrency } from '@/lib/format';
-import {
-  clearStaffSession,
-  resolveStaffSession,
-} from '@/lib/staff-session-storage';
+import { resolveStaffSession, endStaffSessionRemote } from '@/lib/staff-session-storage';
 import { CartItem, MenuItem, Topping } from '@/models/menu.model';
-import { Order } from '@/models/order.model';
+import { Order, OrderStatus } from '@/models/order.model';
 import { PaymentOption } from '@/views/staff/CheckoutModal';
 import {
   WORK_ROLE_LABELS,
@@ -30,20 +33,33 @@ import {
   WorkRole,
 } from '@/models/staff.model';
 import { BRAND } from '@/lib/brand';
+import { TenantInfo } from '@/models/tenant.model';
 import { Role, User } from '@/models/user.model';
-import { StaffLayout } from '@/views/staff/StaffLayout';
+import { PosShellLayout } from '@/views/components/PosShellLayout';
+import { InventoryController } from '@/controllers/inventory.controller';
 import { InvoicePreview } from '@/views/staff/InvoicePreview';
 import { CashierMenuStep } from '@/views/staff/CashierMenuStep';
 import { ToppingModal } from '@/views/staff/ToppingModal';
+import { SugarIceModal } from '@/views/staff/SugarIceModal';
 import { CheckoutModal } from '@/views/staff/CheckoutModal';
+import { posSugarIceEnabled, resolveIceLevels, resolveSugarLevels } from '@/lib/sugar-ice';
 
 type CashierStep = 'menu' | 'invoice' | 'confirm';
 
-const STEPS: { key: CashierStep; label: string }[] = [
-  { key: 'menu', label: 'Chọn món' },
-  { key: 'invoice', label: 'Hóa đơn' },
-  { key: 'confirm', label: 'Hoàn tất' },
-];
+function buildSteps(soloMode: boolean): { key: CashierStep; label: string }[] {
+  if (soloMode) {
+    return [
+      { key: 'menu', label: 'Chọn món' },
+      { key: 'invoice', label: 'Thanh toán' },
+      { key: 'confirm', label: 'Xong' },
+    ];
+  }
+  return [
+    { key: 'menu', label: 'Chọn món' },
+    { key: 'invoice', label: 'Hóa đơn' },
+    { key: 'confirm', label: 'Hoàn tất' },
+  ];
+}
 
 function cartToOrderItems(cart: CartItem[]) {
   return cart.map((c) => ({
@@ -54,10 +70,12 @@ function cartToOrderItems(cart: CartItem[]) {
     price: c.price,
     quantity: c.quantity,
     note: c.note,
+    sugarPercent: c.sugarPercent,
+    icePercent: c.icePercent,
   }));
 }
 
-export function CashierView() {
+export function CashierView({ solo = false }: { solo?: boolean }) {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [session] = useState(() => resolveStaffSession(WorkRole.CASHIER));
@@ -70,7 +88,12 @@ export function CashierView() {
   const [confirmedOrder, setConfirmedOrder] = useState<Order | null>(null);
 
   const [toppingItem, setToppingItem] = useState<MenuItem | null>(null);
+  const [sugarIcePending, setSugarIcePending] = useState<{
+    item: MenuItem;
+    toppings: Topping[];
+  } | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [stockAlerts, setStockAlerts] = useState<{ count: number; items: { name: string }[] } | null>(null);
 
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
@@ -79,6 +102,29 @@ export function CashierView() {
   const [paymentMethods, setPaymentMethods] = useState<PaymentOption[]>([]);
   const [paymentMethod, setPaymentMethod] = useState('');
   const [paymentLabel, setPaymentLabel] = useState('');
+  const [bankTransferDetails, setBankTransferDetails] = useState<{
+    qrImageUrl?: string;
+    bankAccountInfo?: string;
+  }>({});
+
+  useEffect(() => {
+    if (paymentMethod !== 'BANK_TRANSFER') {
+      setBankTransferDetails({});
+      return;
+    }
+    let cancelled = false;
+    void PaymentMethodController.getByCode('BANK_TRANSFER').then((d) => {
+      if (!cancelled && d) {
+        setBankTransferDetails({
+          qrImageUrl: d.qrImageUrl,
+          bankAccountInfo: d.bankAccountInfo,
+        });
+      }
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [paymentMethod]);
 
   useEffect(() => {
     const stored = getStoredUser<User>();
@@ -88,7 +134,7 @@ export function CashierView() {
     }
     if (!session || session.workRole !== WorkRole.CASHIER) {
       if (!isStoreOwner(stored.role)) {
-        router.replace('/dashboard/staff/setup');
+        router.replace(STORE_CHECK_IN_PATH);
       }
       return;
     }
@@ -97,13 +143,21 @@ export function CashierView() {
       return stored;
     });
 
+    const tenantInfo = getStoredTenant<TenantInfo>();
+    const isSoloPlan = solo || isSoloOperatingPlan(tenantInfo);
+    const trackInventory = tenantInfo?.settings?.trackInventory !== false;
+
     Promise.all([
       MenuController.getItems(),
       PaymentMethodController.getActive(),
+      !isSoloPlan && trackInventory
+        ? InventoryController.getPosAlerts().catch(() => null)
+        : Promise.resolve(null),
     ])
-      .then(([menu, payments]) => {
+      .then(([menu, payments, alerts]) => {
         setMenuItems(menu);
         setPaymentMethods(payments);
+        if (alerts && alerts.count > 0) setStockAlerts(alerts);
         if (payments.length > 0) {
           setPaymentMethod(payments[0].code);
           setPaymentLabel(payments[0].label);
@@ -111,22 +165,59 @@ export function CashierView() {
       })
       .catch(() => setError('Không tải được dữ liệu'))
       .finally(() => setLoadingMenu(false));
-  }, [router, session]);
+  }, [router, session, solo]);
 
   const subtotal = useMemo(() => cartSubtotal(cart), [cart]);
+
+  const bankQrProps =
+    paymentMethod === 'BANK_TRANSFER'
+      ? {
+          paymentQrImageUrl: bankTransferDetails.qrImageUrl,
+          paymentBankInfo: bankTransferDetails.bankAccountInfo,
+        }
+      : {};
+
+  const confirmedBankQr =
+    confirmedOrder?.paymentMethod === 'BANK_TRANSFER'
+      ? {
+          paymentQrImageUrl: bankTransferDetails.qrImageUrl,
+          paymentBankInfo: bankTransferDetails.bankAccountInfo,
+        }
+      : {};
+
+  const tenant = getStoredTenant<TenantInfo>();
+  const soloMode = solo || isSoloOperatingPlan(tenant);
+  const sugarIceOpts = posSugarIceEnabled(tenant);
+  const sugarLevels = resolveSugarLevels(tenant);
+  const iceLevels = resolveIceLevels(tenant);
+  const needsSugarIceStep = sugarIceOpts.any;
+
+  const queueSugarIceOrAdd = (item: MenuItem, toppings: Topping[]) => {
+    if (needsSugarIceStep) {
+      setSugarIcePending({ item, toppings });
+      setToppingItem(null);
+      return;
+    }
+    addWithToppings(item, toppings, 100, 100);
+  };
 
   const handleSelectItem = (item: MenuItem) => {
     const hasToppings = (item.toppings?.length ?? 0) > 0;
     if (!hasToppings) {
-      addWithToppings(item, []);
+      queueSugarIceOrAdd(item, []);
       return;
     }
     setToppingItem(item);
   };
 
-  const addWithToppings = (item: MenuItem, toppings: Topping[]) => {
+  const addWithToppings = (
+    item: MenuItem,
+    toppings: Topping[],
+    sugarPercent = 100,
+    icePercent = 100,
+  ) => {
     setCart((prev) => {
-      const existing = findMatchingLine(prev, item.id, toppings);
+      const existing = findMatchingLine(prev, item.id, toppings, sugarPercent, icePercent);
       if (existing) {
         return prev.map((c) =>
           c.cartLineId === existing.cartLineId
@@ -134,9 +225,10 @@ export function CashierView() {
             : c,
         );
       }
-      return [...prev, buildCartLine(item, toppings)];
+      return [...prev, buildCartLine(item, toppings, 1, sugarPercent, icePercent)];
     });
     setToppingItem(null);
+    setSugarIcePending(null);
   };
 
   const updateQty = (cartLineId: string, delta: number) => {
@@ -169,8 +261,15 @@ export function CashierView() {
         workShift: session.workShift,
         subtotal,
         total: subtotal,
+        branchId: user.branchId,
       });
-      setConfirmedOrder(order);
+
+      if (soloMode) {
+        const completed = await OrderController.updateStatus(order.id, OrderStatus.COMPLETED);
+        setConfirmedOrder(completed);
+      } else {
+        setConfirmedOrder(order);
+      }
       setStep('confirm');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Xác nhận thất bại');
@@ -194,12 +293,6 @@ export function CashierView() {
     setStep('menu');
   };
 
-  const handleLogout = () => {
-    clearStaffSession();
-    AuthController.logout();
-    router.replace('/login');
-  };
-
   const openCheckout = () => setCheckoutOpen(true);
 
   const proceedToInvoice = () => {
@@ -219,54 +312,33 @@ export function CashierView() {
     );
   }
 
-  const stepIndex = STEPS.findIndex((s) => s.key === step);
+  const steps = buildSteps(soloMode);
+  const stepIndex = steps.findIndex((s) => s.key === step);
   const orderItems = cartToOrderItems(cart);
+  const posQuickLinks = soloMode
+    ? [{ href: SOLO_SALES_PATH, label: 'Hóa đơn', icon: '📋' }]
+    : [
+        { href: STORE_CASHIER_ORDERS_PATH, label: 'Hóa đơn', icon: '📋' },
+      ];
 
   return (
-    <StaffLayout compact>
+    <PosShellLayout
+      title="Quầy thu ngân"
+      subtitle={
+        soloMode
+          ? 'Bán hàng'
+          : `${WORK_ROLE_LABELS[WorkRole.CASHIER]} · ${WORK_SHIFT_LABELS[session.workShift]}`
+      }
+      quickLinks={posQuickLinks}
+      settingsHref={soloMode ? SOLO_SETTINGS_PATH : undefined}
+      hubHref={soloMode ? SOLO_HUB_PATH : undefined}
+    >
     <div className={`min-h-full ${BRAND.pageBg} print:bg-white`}>
-      <header className="border-b border-stone-200/80 bg-white/90 backdrop-blur-md print:hidden">
+      <div className="border-b border-stone-200/80 bg-white/90 print:hidden">
         <div
-          className={`mx-auto flex items-center justify-between px-4 py-3 ${step === 'menu' ? 'max-w-[100%]' : 'max-w-4xl'}`}
+          className={`mx-auto flex gap-2 px-4 py-3 ${step === 'menu' ? 'max-w-[100%]' : 'max-w-4xl'}`}
         >
-          <div>
-            <p className={`text-xs font-medium ${BRAND.primaryText}`}>
-              {WORK_ROLE_LABELS[WorkRole.CASHIER]} ·{' '}
-              {WORK_SHIFT_LABELS[session.workShift]}
-            </p>
-            <h1 className="text-lg font-bold text-stone-900">Quầy thu ngân</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="hidden text-sm text-stone-600 sm:inline">
-              {user.fullName}
-            </span>
-            <Link
-              href="/dashboard/staff/cashier/orders"
-              className="rounded-lg border border-stone-200 px-3 py-1.5 text-sm text-stone-600 hover:bg-stone-50"
-            >
-              Quản lý đơn
-            </Link>
-            <button
-              type="button"
-              onClick={() => router.push('/dashboard/staff/setup')}
-              className="rounded-lg border border-stone-200 px-3 py-1.5 text-sm text-stone-600 hover:bg-stone-50"
-            >
-              Đổi ca
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-lg border border-stone-200 px-3 py-1.5 text-sm text-stone-600 hover:bg-stone-50"
-            >
-              Thoát
-            </button>
-          </div>
-        </div>
-
-        <div
-          className={`mx-auto flex gap-2 px-4 pb-3 ${step === 'menu' ? 'max-w-[100%]' : 'max-w-4xl'}`}
-        >
-          {STEPS.map((s, i) => (
+          {steps.map((s, i) => (
             <div
               key={s.key}
               className={`flex-1 rounded-lg py-2 text-center text-xs font-semibold transition ${
@@ -279,7 +351,21 @@ export function CashierView() {
             </div>
           ))}
         </div>
-      </header>
+        {!soloMode && (
+          <div className="mx-auto flex justify-end px-4 pb-2 max-w-4xl">
+            <button
+              type="button"
+              onClick={() => {
+                void endStaffSessionRemote();
+                router.push(STORE_CHECK_IN_PATH);
+              }}
+              className="text-xs text-stone-500 hover:text-[#2F80ED]"
+            >
+              Đổi ca / vai trò
+            </button>
+          </div>
+        )}
+      </div>
 
       <main
         className={`mx-auto px-4 py-4 print:hidden ${step === 'menu' ? 'max-w-[100%]' : 'max-w-4xl py-6'}`}
@@ -288,6 +374,21 @@ export function CashierView() {
           <p className="mb-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600 ring-1 ring-red-100">
             {error}
           </p>
+        )}
+
+        {stockAlerts && stockAlerts.count > 0 && (
+          <div className="mb-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <p className="font-semibold">
+              ⚠️ {stockAlerts.count} nguyên liệu sắp hết tại kho bếp
+            </p>
+            <p className="mt-1 text-xs text-amber-800">
+              {stockAlerts.items.map((i) => i.name).join(' · ')}
+              {stockAlerts.count > stockAlerts.items.length ? ' · …' : ''}
+            </p>
+            <p className="mt-1 text-xs text-amber-700">
+              Báo quản lý ca cấp phát NL hoặc bếp có thể không làm được món khi hết hàng.
+            </p>
+          </div>
         )}
 
         {step === 'menu' && (
@@ -306,6 +407,7 @@ export function CashierView() {
           <div className="mx-auto max-w-md space-y-4">
             <InvoicePreview
               printable
+              storeName={tenant?.storeName}
               items={orderItems}
               customerName={customerName}
               customerPhone={customerPhone}
@@ -313,7 +415,8 @@ export function CashierView() {
               note={note}
               paymentMethod={paymentMethod}
               paymentMethodLabel={paymentLabel}
-              workShift={session.workShift}
+              {...bankQrProps}
+              workShift={soloMode ? undefined : session.workShift}
               staffName={user.fullName}
               subtotal={subtotal}
               total={subtotal}
@@ -340,7 +443,7 @@ export function CashierView() {
                 disabled={submitting}
                 className="flex-1 rounded-xl bg-emerald-500 py-3 text-sm font-bold text-white hover:bg-emerald-600 disabled:opacity-60"
               >
-                {submitting ? '...' : 'Xác nhận'}
+                {submitting ? '...' : soloMode ? 'Hoàn thành đơn' : 'Xác nhận'}
               </button>
             </div>
           </div>
@@ -350,7 +453,9 @@ export function CashierView() {
           <div className="mx-auto max-w-md space-y-4 text-center">
             <div className="rounded-2xl bg-emerald-50 p-6 ring-1 ring-emerald-100">
               <p className="text-4xl">✅</p>
-              <h2 className="mt-2 text-xl font-bold text-emerald-800">Hoàn tất!</h2>
+              <h2 className="mt-2 text-xl font-bold text-emerald-800">
+                {soloMode ? 'Đơn hoàn thành!' : 'Hoàn tất!'}
+              </h2>
               <p className="mt-1 font-mono text-sm text-stone-600">
                 {confirmedOrder.invoiceNumber}
               </p>
@@ -360,6 +465,7 @@ export function CashierView() {
             </div>
             <InvoicePreview
               printable
+              storeName={tenant?.storeName}
               invoiceNumber={confirmedOrder.invoiceNumber}
               orderNumber={confirmedOrder.orderNumber}
               items={confirmedOrder.items}
@@ -368,6 +474,7 @@ export function CashierView() {
               tableNumber={confirmedOrder.tableNumber}
               note={confirmedOrder.note}
               paymentMethod={confirmedOrder.paymentMethod}
+              {...confirmedBankQr}
               workShift={confirmedOrder.workShift}
               staffName={confirmedOrder.staffName}
               subtotal={confirmedOrder.subtotal}
@@ -397,12 +504,35 @@ export function CashierView() {
       <ToppingModal
         item={toppingItem}
         onClose={() => setToppingItem(null)}
-        onConfirm={(toppings) => toppingItem && addWithToppings(toppingItem, toppings)}
+        onConfirm={(toppings) => {
+          if (toppingItem) queueSugarIceOrAdd(toppingItem, toppings);
+        }}
+      />
+
+      <SugarIceModal
+        item={sugarIcePending?.item ?? null}
+        toppings={sugarIcePending?.toppings ?? []}
+        enableSugar={sugarIceOpts.sugar}
+        enableIce={sugarIceOpts.ice}
+        sugarLevels={sugarLevels}
+        iceLevels={iceLevels}
+        onClose={() => setSugarIcePending(null)}
+        onConfirm={(sugarPercent, icePercent) => {
+          if (sugarIcePending) {
+            addWithToppings(
+              sugarIcePending.item,
+              sugarIcePending.toppings,
+              sugarPercent,
+              icePercent,
+            );
+          }
+        }}
       />
 
       <CheckoutModal
         open={checkoutOpen}
         onClose={() => setCheckoutOpen(false)}
+        soloMode={soloMode}
         subtotal={subtotal}
         customerName={customerName}
         customerPhone={customerPhone}
@@ -410,6 +540,7 @@ export function CashierView() {
         note={note}
         paymentMethod={paymentMethod}
         paymentOptions={paymentMethods}
+        bankTransferDetails={bankTransferDetails}
         onCustomerNameChange={setCustomerName}
         onCustomerPhoneChange={setCustomerPhone}
         onTableNumberChange={setTableNumber}
@@ -426,6 +557,7 @@ export function CashierView() {
         {(step === 'invoice' || step === 'confirm') && (
           <InvoicePreview
             printable
+            storeName={tenant?.storeName}
             invoiceNumber={confirmedOrder?.invoiceNumber}
             orderNumber={confirmedOrder?.orderNumber}
             items={confirmedOrder?.items ?? orderItems}
@@ -434,6 +566,7 @@ export function CashierView() {
             tableNumber={tableNumber}
             note={note}
             paymentMethod={paymentMethod}
+            {...bankQrProps}
             workShift={session.workShift}
             staffName={user.fullName}
             subtotal={subtotal}
@@ -443,6 +576,6 @@ export function CashierView() {
         )}
       </div>
     </div>
-    </StaffLayout>
+    </PosShellLayout>
   );
 }

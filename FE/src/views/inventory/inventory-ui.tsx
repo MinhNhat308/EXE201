@@ -193,7 +193,7 @@ export function IngredientStockCard({ item }: { item: StockItem }) {
           </p>
         </div>
         {item.isLow ? (
-          <span className="shrink-0 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold uppercase text-white">
+          <span className="shrink-0 rounded-full bg-[#2F80ED] px-2 py-0.5 text-[10px] font-bold uppercase text-white">
             Sắp hết
           </span>
         ) : (
@@ -209,10 +209,19 @@ export function IngredientStockCard({ item }: { item: StockItem }) {
       <p className="mt-0.5 text-xs text-stone-500">
         Tối thiểu: {item.displayMinStock} {item.displayUnit}
       </p>
+      {item.nearestExpiry && (
+        <p className="mt-1 text-xs font-medium text-amber-800">
+          HSD gần nhất:{' '}
+          {new Date(item.nearestExpiry).toLocaleDateString('vi-VN')}
+          {item.expiringQty != null && item.expiringQty > 0
+            ? ` · ${item.expiringQty.toLocaleString('vi-VN')} ${item.displayUnit}`
+            : ''}
+        </p>
+      )}
       <div className="mt-3 h-2 overflow-hidden rounded-full bg-stone-200/80">
         <div
           className={`h-full rounded-full transition-all ${
-            item.isLow ? 'bg-amber-500' : 'bg-blue-500'
+            item.isLow ? 'bg-[#2F80ED]' : 'bg-blue-500'
           }`}
           style={{ width: `${fill}%` }}
         />
@@ -302,7 +311,7 @@ export function WorkflowSteps({ theme }: { theme: InventoryTheme }) {
           { n: '1', t: 'Kế toán nhập NCC', d: 'Vào KHO_TONG' },
           { n: '2', t: 'Đầu ca: cấp phát', d: 'PXK + chứng từ' },
           { n: '3', t: 'Kế toán duyệt', d: 'Kho con nhận hàng' },
-          { n: '4', t: 'Cuối ca: hoàn trả', d: 'Gắn mã phiếu cấp' },
+          { n: '4', t: 'Bàn giao ca sau', d: 'Tồn dư giữ tại kho con' },
         ]
       : [
           { n: '1', t: 'Nhập NCC', d: 'Hóa đơn → KHO_TONG' },

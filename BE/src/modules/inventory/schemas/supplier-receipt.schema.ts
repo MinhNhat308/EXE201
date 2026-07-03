@@ -14,6 +14,9 @@ export class SupplierReceiptLine {
 
   @Prop({ default: 0 })
   unitPrice: number;
+
+  @Prop()
+  expiryDate?: Date;
 }
 
 export const SupplierReceiptLineSchema =
@@ -79,6 +82,7 @@ SupplierReceiptSchema.set('toJSON', {
         ingredientId: l.ingredientId?.toString?.() ?? l.ingredientId,
         quantity: l.quantity,
         unitPrice: l.unitPrice,
+        expiryDate: l.expiryDate,
       }),
     ),
     createdBy: ret.createdBy?.toString(),

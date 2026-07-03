@@ -5,49 +5,100 @@ import { usePolling } from '@/lib/use-polling';
 import { useRouter } from 'next/navigation';
 import { OrderController } from '@/controllers/order.controller';
 import { getStoredUser } from '@/lib/auth-storage';
-import { canAccessRole } from '@/lib/role-access';
-import { KitchenLayout } from './KitchenLayout';
+import { canAccessRole, isStoreOwner } from '@/lib/role-access';
+import {
+  kitchenStatusCounts,
+  nextKitchenStatus,
+  type KitchenSortMode,
+} from '@/lib/kitchen-order-utils';
+import { useKitchenNewOrderAlert } from '@/lib/use-kitchen-new-order-alert';
+import { useStableStaffSession } from '@/lib/use-staff-session';
+import { STORE_CHECK_IN_PATH } from '@/lib/workspace-routes';
 import {
   normalizeStatus,
   Order,
   OrderStatus,
 } from '@/models/order.model';
 import { Role, User } from '@/models/user.model';
-import { OrderGridCard } from '@/views/orders/OrderGridCard';
-import { OrderBillDetail } from '@/views/orders/OrderBillDetail';
-import { OrderStatusBadge } from '@/views/orders/OrderStatusBadge';
+import { KitchenLayout } from './KitchenLayout';
+import { KitchenKanbanBoard } from './KitchenKanbanBoard';
+import { KitchenKdsFullscreenShell, KitchenKdsHeader, type KitchenCardDensity } from './KitchenKdsHeader';
+import { KitchenOrderModal, KitchenToast } from './KitchenOrderModal';
 
-type FilterKey = 'active' | OrderStatus.PENDING | OrderStatus.PREPARING | OrderStatus.READY;
-
-const FILTERS: { key: FilterKey; label: string }[] = [
-  { key: 'active', label: 'Đang xử lý' },
-  { key: OrderStatus.PENDING, label: 'Chưa thực hiện' },
-  { key: OrderStatus.PREPARING, label: 'Đang thực hiện' },
-  { key: OrderStatus.READY, label: 'Đã hoàn thành' },
-];
+const KDS_STORAGE_KEY = 'kitchen_kds_mode';
+const SORT_STORAGE_KEY = 'kitchen_sort_mode';
+const DENSITY_STORAGE_KEY = 'kitchen_density';
 
 export function KitchenOrdersView() {
   const router = useRouter();
+  const { session, refresh } = useStableStaffSession();
+  const workShift = session?.checkedInRole === Role.KITCHEN ? session.workShift : undefined;
   const [user, setUser] = useState<User | null>(null);
+  const [ready, setReady] = useState(false);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState<FilterKey>('active');
+  const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
   const [selected, setSelected] = useState<Order | null>(null);
-  const [updating, setUpdating] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [error, setError] = useState('');
+  const [clock, setClock] = useState(0);
+  const [kdsMode, setKdsMode] = useState(false);
+  const [sortMode, setSortMode] = useState<KitchenSortMode>('fifo');
+  const [density, setDensity] = useState<KitchenCardDensity>('compact');
 
-  const load = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true);
-    try {
-      const data = await OrderController.getToday(undefined, true);
-      setOrders(data.filter((o) => normalizeStatus(o.status) !== OrderStatus.CANCELLED));
-      setError('');
-    } catch {
-      if (!silent) setError('Không tải được danh sách đơn');
-    } finally {
-      if (!silent) setLoading(false);
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    setKdsMode(localStorage.getItem(KDS_STORAGE_KEY) === '1');
+    const saved = localStorage.getItem(SORT_STORAGE_KEY);
+    if (saved === 'takeaway-first' || saved === 'fifo') {
+      setSortMode(saved);
+    }
+    const savedDensity = localStorage.getItem(DENSITY_STORAGE_KEY);
+    if (savedDensity === 'compact' || savedDensity === 'comfortable') {
+      setDensity(savedDensity);
     }
   }, []);
+
+  useEffect(() => {
+    const id = window.setInterval(() => setClock((c) => c + 1), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const counts = useMemo(() => kitchenStatusCounts(orders), [orders]);
+  const { toast, dismissToast } = useKitchenNewOrderAlert(counts.pending, ready && !!user);
+
+  const lastSyncLabel = useMemo(() => {
+    void clock;
+    if (!lastSyncAt) return 'Chưa đồng bộ';
+    const sec = Math.floor((Date.now() - lastSyncAt.getTime()) / 1000);
+    if (sec < 8) return 'Vừa cập nhật';
+    if (sec < 60) return `Cập nhật ${sec}s trước`;
+    return `Cập nhật ${Math.floor(sec / 60)} phút trước`;
+  }, [lastSyncAt, clock]);
+
+  const load = useCallback(
+    async (silent = false) => {
+      if (!silent) setLoading(true);
+      try {
+        const data = await OrderController.getToday(workShift, true);
+        setOrders(
+          data.filter((o) => normalizeStatus(o.status) !== OrderStatus.CANCELLED),
+        );
+        setLastSyncAt(new Date());
+        setError('');
+      } catch (err) {
+        if (!silent) {
+          setError(
+            err instanceof Error ? err.message : 'Không tải được danh sách đơn',
+          );
+        }
+      } finally {
+        if (!silent) setLoading(false);
+      }
+    },
+    [workShift],
+  );
 
   useEffect(() => {
     const stored = getStoredUser<User>();
@@ -55,166 +106,165 @@ export function KitchenOrdersView() {
       router.replace('/login');
       return;
     }
-    setUser((prev) => {
-      if (prev && prev.email === stored.email) return prev;
-      return stored;
-    });
-    void load(false);
-  }, [router, load]);
 
-  usePolling(() => load(true), 12_000, !!user);
+    setUser(stored);
 
-  const filtered = useMemo(() => {
-    if (filter === 'active') {
-      return orders.filter((o) => {
-        const s = normalizeStatus(o.status);
-        return s !== OrderStatus.READY && s !== OrderStatus.COMPLETED;
-      });
+    if (isStoreOwner(stored.role)) {
+      setReady(true);
+      return;
     }
-    return orders.filter((o) => normalizeStatus(o.status) === filter);
-  }, [orders, filter]);
 
-  const selectedStatus = selected ? normalizeStatus(selected.status) : null;
+    let cancelled = false;
 
-  const nextStatus =
-    selectedStatus === OrderStatus.PENDING
-      ? OrderStatus.PREPARING
-      : selectedStatus === OrderStatus.PREPARING
-        ? OrderStatus.READY
-        : null;
+    void refresh()
+      .then((active) => {
+        if (cancelled) return;
+        if (!active || active.checkedInRole !== Role.KITCHEN) {
+          router.replace(STORE_CHECK_IN_PATH);
+          return;
+        }
+        setReady(true);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setError('Không đồng bộ được ca làm. Kiểm tra Backend đang chạy.');
+        setReady(true);
+      });
 
-  const nextLabel =
-    nextStatus === OrderStatus.PREPARING
-      ? 'Bắt đầu làm → Đang thực hiện'
-      : nextStatus === OrderStatus.READY
-        ? 'Hoàn thành → Đã xong'
-        : null;
+    return () => {
+      cancelled = true;
+    };
+  }, [router, refresh]);
 
-  const handleAdvance = async () => {
-    if (!selected || !nextStatus) return;
-    setUpdating(true);
+  useEffect(() => {
+    if (!ready || !user) return;
+    void load(false);
+  }, [ready, user, workShift, load]);
+
+  usePolling(() => load(true), 10_000, ready && !!user && !!workShift);
+
+  const handleAdvance = async (order: Order) => {
+    const next = nextKitchenStatus(order.status);
+    if (!next) return;
+
+    setUpdatingId(order.id);
     setError('');
     try {
-      const updated = await OrderController.updateKitchenStatus(
-        selected.id,
-        nextStatus,
-      );
-      setSelected(updated);
-      await load();
+      const updated = await OrderController.updateKitchenStatus(order.id, next);
+      if (selected?.id === order.id) setSelected(updated);
+      await load(true);
+      if (next === OrderStatus.READY) {
+        setModalOpen(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Cập nhật thất bại');
     } finally {
-      setUpdating(false);
+      setUpdatingId(null);
     }
   };
 
-  if (!user) {
+  const toggleKds = () => {
+    setKdsMode((prev) => {
+      const next = !prev;
+      localStorage.setItem(KDS_STORAGE_KEY, next ? '1' : '0');
+      return next;
+    });
+  };
+
+  const toggleSort = () => {
+    setSortMode((prev) => {
+      const next = prev === 'fifo' ? 'takeaway-first' : 'fifo';
+      localStorage.setItem(SORT_STORAGE_KEY, next);
+      return next;
+    });
+  };
+
+  const toggleDensity = () => {
+    setDensity((prev) => {
+      const next = prev === 'compact' ? 'comfortable' : 'compact';
+      localStorage.setItem(DENSITY_STORAGE_KEY, next);
+      return next;
+    });
+  };
+
+  if (!user || !ready) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-stone-500">
-        Đang tải...
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-stone-500">
+        <div className="h-10 w-10 animate-spin rounded-full border-4 border-stone-200 border-t-[#2F80ED]" />
+        <p className="text-sm">Đang vào màn bếp...</p>
       </div>
+    );
+  }
+
+  const header = (
+    <KitchenKdsHeader
+      workShift={workShift}
+      counts={counts}
+      lastSyncLabel={lastSyncLabel}
+      sortMode={sortMode}
+      density={density}
+      kdsMode={kdsMode}
+      onRefresh={() => void load()}
+      onToggleSort={toggleSort}
+      onToggleDensity={toggleDensity}
+      onToggleKds={toggleKds}
+      onExitKds={toggleKds}
+    />
+  );
+
+  const board = loading && orders.length === 0 ? (
+    <p className="py-12 text-center text-stone-500">Đang tải đơn...</p>
+  ) : (
+    <KitchenKanbanBoard
+      orders={orders}
+      sortMode={sortMode}
+      density={density}
+      kdsMode={kdsMode}
+      updatingId={updatingId}
+      onAdvance={(order) => void handleAdvance(order)}
+      onOpen={(order) => {
+        setSelected(order);
+        setModalOpen(true);
+      }}
+    />
+  );
+
+  const body = (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <KitchenToast message={toast} onDismiss={dismissToast} />
+
+      {error && (
+        <p className="mb-2 shrink-0 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">{error}</p>
+      )}
+
+      {board}
+
+      <KitchenOrderModal
+        order={selected}
+        open={modalOpen}
+        updating={!!selected && updatingId === selected.id}
+        onClose={() => {
+          setModalOpen(false);
+          setSelected(null);
+        }}
+        onAdvance={() => selected && void handleAdvance(selected)}
+      />
+    </div>
+  );
+
+  if (kdsMode) {
+    return (
+      <KitchenKdsFullscreenShell header={header}>
+        {body}
+      </KitchenKdsFullscreenShell>
     );
   }
 
   return (
     <KitchenLayout>
-      <div className="mb-4 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-stone-900">Danh sách đơn bếp</h1>
-        <button
-          type="button"
-          onClick={() => void load()}
-          className="rounded-lg border border-stone-200 px-3 py-1.5 text-sm hover:bg-stone-50"
-        >
-          🔄 Làm mới
-        </button>
-      </div>
-      <div>
-        {error && (
-          <p className="mb-4 rounded-xl bg-red-50 px-4 py-2 text-sm text-red-600">{error}</p>
-        )}
-
-        <div className="mb-4 flex flex-wrap gap-2">
-          {FILTERS.map((f) => (
-            <button
-              key={f.key}
-              type="button"
-              onClick={() => setFilter(f.key)}
-              className={`rounded-full px-3 py-1.5 text-xs font-semibold ${
-                filter === f.key
-                  ? 'bg-sky-500 text-white'
-                  : 'bg-white text-stone-600 ring-1 ring-stone-200'
-              }`}
-            >
-              {f.label}
-            </button>
-          ))}
-        </div>
-
-        <div className="grid gap-4 lg:grid-cols-[1fr_380px]">
-          <div>
-            {loading ? (
-              <p className="text-stone-400">Đang tải...</p>
-            ) : filtered.length === 0 ? (
-              <p className="rounded-2xl bg-white p-12 text-center text-stone-400">
-                Không có đơn trong mục này
-              </p>
-            ) : (
-              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                {filtered.map((order) => (
-                  <OrderGridCard
-                    key={order.id}
-                    order={order}
-                    selected={selected?.id === order.id}
-                    onClick={() => setSelected(order)}
-                  />
-                ))}
-              </div>
-            )}
-          </div>
-
-          <aside className="lg:sticky lg:top-4 lg:h-fit">
-            {selected ? (
-              <div className="rounded-2xl border border-sky-200 bg-white p-5 shadow-sm">
-                <div className="mb-4 flex items-center justify-between">
-                  <h2 className="font-bold">Thông tin đơn</h2>
-                  <OrderStatusBadge status={selected.status} />
-                </div>
-
-                <div className="mb-4 rounded-xl bg-sky-50 p-3 text-sm">
-                  <p className="font-semibold text-sky-900">Khách hàng</p>
-                  <p className="mt-1">
-                    {selected.customerName || 'Khách lẻ'}
-                    {selected.customerPhone && ` · ${selected.customerPhone}`}
-                  </p>
-                  <p className="mt-1 text-sky-700">
-                    Bàn / Order: <strong>#{selected.tableNumber}</strong>
-                  </p>
-                </div>
-
-                <OrderBillDetail order={selected} />
-
-                {nextLabel ? (
-                  <button
-                    type="button"
-                    onClick={handleAdvance}
-                    disabled={updating}
-                    className="mt-4 w-full rounded-xl bg-sky-500 py-3 text-sm font-bold text-white hover:bg-sky-600 disabled:opacity-60"
-                  >
-                    {updating ? 'Đang cập nhật...' : nextLabel}
-                  </button>
-                ) : (
-                  <p className="mt-4 rounded-xl bg-emerald-50 px-3 py-2 text-center text-sm text-emerald-700">
-                    ✓ Đơn đã hoàn thành bếp
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div className="rounded-2xl border border-dashed border-sky-200 bg-white/60 p-8 text-center text-sm text-stone-400">
-                Chọn đơn để xem bill và cập nhật trạng thái
-              </div>
-            )}
-          </aside>
-        </div>
+      <div className="flex h-[calc(100vh-2rem)] min-h-[32rem] flex-col">
+        {header}
+        {body}
       </div>
     </KitchenLayout>
   );

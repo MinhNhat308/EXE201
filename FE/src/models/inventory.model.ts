@@ -9,6 +9,7 @@ export interface WarehouseLocation {
   isActive: boolean;
   isKitchenSource: boolean;
   isCentralWarehouse?: boolean;
+  branchId?: string;
 }
 
 export interface Ingredient {
@@ -18,6 +19,7 @@ export interface Ingredient {
   category: IngredientCategory;
   currentStock: number;
   minStock: number;
+  shelfLifeDays?: number;
   isActive?: boolean;
 }
 
@@ -29,6 +31,8 @@ export interface StockItem extends Ingredient {
   displayStock: number;
   displayUnit: string;
   displayMinStock: number;
+  nearestExpiry?: string;
+  expiringQty?: number;
 }
 
 export interface WarehouseOverview {
@@ -38,6 +42,9 @@ export interface WarehouseOverview {
   liquidLow: number;
   todayUsageLines: number;
   todayReceiptCount: number;
+  todayReceiptValue: number;
+  monthReceiptCount: number;
+  monthReceiptValue: number;
   byCategory: Record<IngredientCategory, StockItem[]>;
   warehouses: WarehouseLocation[];
 }
@@ -52,13 +59,20 @@ export interface RecipeLine {
 export interface Recipe {
   id: string;
   menuItemId: string;
+  intensityPercent?: number;
+  sugarPercent?: number;
+  icePercent?: number;
   lines: RecipeLine[];
 }
 
 export interface SupplierReceiptLine {
   ingredientId: string;
+  ingredientName?: string;
+  unit?: string;
   quantity: number;
   unitPrice?: number;
+  lineTotal?: number;
+  expiryDate?: string;
 }
 
 export interface SupplierReceipt {
@@ -71,6 +85,8 @@ export interface SupplierReceipt {
   documentDate: string;
   note?: string;
   lines: SupplierReceiptLine[];
+  lineCount?: number;
+  totalValue?: number;
   createdByName?: string;
   createdAt?: string;
 }

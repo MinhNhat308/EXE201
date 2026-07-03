@@ -15,7 +15,9 @@ import {
 } from '../../common/enums/order-status.enum';
 import { WorkShift } from '../../common/enums/work-shift.enum';
 import { PaymentMethodsService } from '../payment-methods/payment-methods.service';
+import type { TodayReportResponse } from './dto/today-report.dto';
 import { InventoryService } from '../inventory/inventory.service';
+import { TenantsService } from '../tenants/tenants.service';
 import { CancelOrderDto } from './dto/cancel-order.dto';
 import { CreateOrderDto } from './dto/create-order.dto';
 import { UpdateKitchenStatusDto } from './dto/update-kitchen-status.dto';
@@ -43,9 +45,17 @@ export class OrdersService {
   constructor(
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     private readonly paymentMethodsService: PaymentMethodsService,
+    private readonly tenantsService: TenantsService,
     @Inject(forwardRef(() => InventoryService))
     private readonly inventoryService: InventoryService,
   ) {}
+
+  private async maybeDeductInventory(order: OrderDocument): Promise<void> {
+    if (!order.tenantId) return;
+    const tenant = await this.tenantsService.findById(order.tenantId.toString());
+    if (tenant.settings?.trackInventory === false) return;
+    await this.inventoryService.deductForOrder(order._id.toString());
+  }
 
   private getTodayRange() {
     const now = new Date();
@@ -160,6 +170,10 @@ export class OrdersService {
         dailySequence: seq,
         staffId: staff._id,
         staffName: staff.fullName,
+        branchId:
+          createOrderDto.branchId != null
+            ? new Types.ObjectId(createOrderDto.branchId)
+            : staff.branchId,
         status: OrderStatus.PENDING,
         items: createOrderDto.items.map((item) => ({
           menuItemId: item.menuItemId,
@@ -169,6 +183,8 @@ export class OrdersService {
           price: item.price,
           quantity: item.quantity,
           note: item.note,
+          sugarPercent: item.sugarPercent,
+          icePercent: item.icePercent,
         })),
       });
 
@@ -205,6 +221,7 @@ export class OrdersService {
   async findToday(
     workShift?: WorkShift,
     activeOnly = false,
+    branchId?: string,
   ): Promise<OrderDocument[]> {
     const { start, end } = this.getTodayRange();
     const filter: Record<string, unknown> = {
@@ -215,11 +232,132 @@ export class OrdersService {
     if (activeOnly) {
       filter.status = { $in: ACTIVE_STATUSES };
     }
+    if (branchId) {
+      filter.branchId = new Types.ObjectId(branchId);
+    }
 
     return this.orderModel
       .find(filter)
       .sort({ dailySequence: 1, createdAt: -1 })
       .exec();
+  }
+
+  async getTodayReport(workShift?: WorkShift): Promise<TodayReportResponse> {
+    const orders = await this.findToday(workShift);
+    const byShift: TodayReportResponse['byShift'] = {};
+    for (const shift of Object.values(WorkShift)) {
+      byShift[shift] = {
+        count: 0,
+        paid: 0,
+        completed: 0,
+        revenue: 0,
+        servedRevenue: 0,
+      };
+    }
+
+    const byStatus: TodayReportResponse['byStatus'] = {
+      [OrderStatus.PENDING]: { count: 0, revenue: 0 },
+      [OrderStatus.PREPARING]: { count: 0, revenue: 0 },
+      [OrderStatus.READY]: { count: 0, revenue: 0 },
+      [OrderStatus.COMPLETED]: { count: 0, revenue: 0 },
+      [OrderStatus.CANCELLED]: { count: 0, revenue: 0 },
+    };
+
+    const byPaymentMethod: TodayReportResponse['byPaymentMethod'] = {};
+    const itemCounts = new Map<string, number>();
+
+    let paidCount = 0;
+    let completedCount = 0;
+    let cancelledCount = 0;
+    let pendingCount = 0;
+    let preparingCount = 0;
+    let readyCount = 0;
+    let revenue = 0;
+    let servedRevenue = 0;
+    let cashTotal = 0;
+    let bankTotal = 0;
+
+    for (const o of orders) {
+      const shift = o.workShift as WorkShift;
+      const status = normalizeOrderStatus(o.status);
+      const total = o.total ?? 0;
+      const isCancelled = status === OrderStatus.CANCELLED;
+      const isPaid = !isCancelled;
+      const isCompleted = status === OrderStatus.COMPLETED;
+
+      if (byShift[shift]) {
+        byShift[shift].count += 1;
+      }
+
+      if (byStatus[status]) {
+        byStatus[status].count += 1;
+        if (isPaid) byStatus[status].revenue += total;
+      }
+
+      if (isCancelled) {
+        cancelledCount += 1;
+        continue;
+      }
+
+      paidCount += 1;
+      revenue += total;
+
+      if (byShift[shift]) {
+        byShift[shift].paid += 1;
+        byShift[shift].revenue += total;
+      }
+
+      const pm = o.paymentMethod ?? 'OTHER';
+      if (!byPaymentMethod[pm]) {
+        byPaymentMethod[pm] = { count: 0, total: 0 };
+      }
+      byPaymentMethod[pm].count += 1;
+      byPaymentMethod[pm].total += total;
+
+      if (pm === 'CASH') cashTotal += total;
+      if (pm === 'BANK_TRANSFER') bankTotal += total;
+
+      for (const line of o.items ?? []) {
+        itemCounts.set(line.name, (itemCounts.get(line.name) ?? 0) + line.quantity);
+      }
+
+      if (status === OrderStatus.PENDING) pendingCount += 1;
+      else if (status === OrderStatus.PREPARING) preparingCount += 1;
+      else if (status === OrderStatus.READY) readyCount += 1;
+
+      if (isCompleted) {
+        completedCount += 1;
+        servedRevenue += total;
+        if (byShift[shift]) {
+          byShift[shift].completed += 1;
+          byShift[shift].servedRevenue += total;
+        }
+      }
+    }
+
+    const topItems = [...itemCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)
+      .map(([name, quantity]) => ({ name, quantity }));
+
+    return {
+      orderCount: orders.length,
+      paidCount,
+      completedCount,
+      cancelledCount,
+      pendingCount,
+      preparingCount,
+      readyCount,
+      revenue,
+      servedRevenue,
+      averageTicket: paidCount > 0 ? Math.round(revenue / paidCount) : 0,
+      cashTotal,
+      bankTotal,
+      byShift,
+      byStatus,
+      byPaymentMethod,
+      topItems,
+    };
   }
 
   async findActiveForServer(workShift?: WorkShift): Promise<OrderDocument[]> {
@@ -260,6 +398,8 @@ export class OrdersService {
         price: item.price,
         quantity: item.quantity,
         note: item.note,
+        sugarPercent: item.sugarPercent,
+        icePercent: item.icePercent,
       }));
     }
 
@@ -313,22 +453,31 @@ export class OrdersService {
     const saved = await order.save();
 
     if (next === OrderStatus.READY) {
-      await this.inventoryService.deductForOrder(saved._id.toString());
+      await this.maybeDeductInventory(saved);
     }
 
     return saved;
   }
 
   async updateStatus(id: string, status: OrderStatus): Promise<OrderDocument> {
-    const order = await this.orderModel
-      .findByIdAndUpdate(id, { status }, { new: true })
-      .exec();
+    const order = await this.findById(id);
+    const current = normalizeOrderStatus(order.status);
+    const next = normalizeOrderStatus(status);
 
-    if (!order) {
-      throw new NotFoundException('Không tìm thấy đơn hàng');
+    if (next === OrderStatus.COMPLETED && current !== OrderStatus.READY) {
+      throw new BadRequestException(
+        'Chỉ giao được đơn ở trạng thái READY (bếp đã xong)',
+      );
     }
 
-    return order;
+    order.status = next;
+    const saved = await order.save();
+
+    if (next === OrderStatus.COMPLETED || next === OrderStatus.READY) {
+      await this.maybeDeductInventory(saved);
+    }
+
+    return saved;
   }
 
   async findById(id: string): Promise<OrderDocument> {

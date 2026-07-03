@@ -21,6 +21,7 @@ export function IngredientsAdminView() {
     category: IngredientCategory.LIQUID,
     currentStock: 0,
     minStock: 0,
+    shelfLifeDays: '' as number | '',
   });
 
   const openCreate = () => {
@@ -30,6 +31,7 @@ export function IngredientsAdminView() {
       category: IngredientCategory.LIQUID,
       currentStock: 0,
       minStock: 0,
+      shelfLifeDays: '',
     });
     setModalOpen(true);
   };
@@ -41,6 +43,7 @@ export function IngredientsAdminView() {
       category: row.category,
       currentStock: row.currentStock,
       minStock: row.minStock,
+      shelfLifeDays: row.shelfLifeDays ?? '',
     });
     setModalOpen(true);
   };
@@ -69,6 +72,8 @@ export function IngredientsAdminView() {
         await InventoryController.updateIngredient(editing.id, {
           name: form.name.trim(),
           category: form.category,
+          shelfLifeDays:
+            form.shelfLifeDays === '' ? undefined : Number(form.shelfLifeDays),
         });
       } else {
         await InventoryController.createIngredient({
@@ -76,6 +81,8 @@ export function IngredientsAdminView() {
           category: form.category,
           currentStock: form.currentStock,
           minStock: form.minStock,
+          shelfLifeDays:
+            form.shelfLifeDays === '' ? undefined : Number(form.shelfLifeDays),
         });
       }
       setModalOpen(false);
@@ -84,6 +91,7 @@ export function IngredientsAdminView() {
         category: IngredientCategory.LIQUID,
         currentStock: 0,
         minStock: 0,
+        shelfLifeDays: '',
       });
       await load();
     } catch (err) {
@@ -104,7 +112,7 @@ export function IngredientsAdminView() {
         <button
           type="button"
           onClick={openCreate}
-          className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600"
+          className="rounded-lg bg-[#2F80ED] px-4 py-2 hover:bg-[#2569c7] text-sm font-medium text-white hover:bg-[#2569c7]"
         >
           + Thêm nguyên liệu
         </button>
@@ -125,6 +133,7 @@ export function IngredientsAdminView() {
                 <th className="px-4 py-3 font-medium">Loại</th>
                 <th className="px-4 py-3 font-medium">Đơn vị</th>
                 <th className="px-4 py-3 font-medium">Tồn (tổng)</th>
+                <th className="px-4 py-3 font-medium">HSD mặc định</th>
                 <th className="px-4 py-3 font-medium" />
               </tr>
             </thead>
@@ -138,6 +147,9 @@ export function IngredientsAdminView() {
                   <td className="px-4 py-3">{row.unit}</td>
                   <td className="px-4 py-3">
                     {row.currentStock.toLocaleString('vi-VN')} {row.unit}
+                  </td>
+                  <td className="px-4 py-3 text-stone-600">
+                    {row.shelfLifeDays ? `${row.shelfLifeDays} ngày` : '—'}
                   </td>
                   <td className="px-4 py-3 text-right">
                     <button
@@ -186,6 +198,22 @@ export function IngredientsAdminView() {
               ))}
             </select>
           </label>
+          <label className="block text-sm">
+            <span className="font-medium">Hạn dùng mặc định (ngày)</span>
+            <input
+              type="number"
+              min={1}
+              placeholder="VD: 7 — gợi ý HSD khi nhập NCC"
+              value={form.shelfLifeDays}
+              onChange={(e) =>
+                setForm({
+                  ...form,
+                  shelfLifeDays: e.target.value === '' ? '' : Number(e.target.value),
+                })
+              }
+              className="mt-1 w-full rounded-lg border px-3 py-2"
+            />
+          </label>
           {!editing && (
             <div className="grid grid-cols-2 gap-3">
               <label className="block text-sm">
@@ -221,7 +249,7 @@ export function IngredientsAdminView() {
           </p>
           <button
             type="submit"
-            className="w-full rounded-lg bg-amber-500 py-2.5 font-medium text-white hover:bg-amber-600"
+            className="w-full rounded-lg bg-[#2F80ED] py-2.5 font-medium text-white hover:bg-[#2569c7]"
           >
             Lưu
           </button>

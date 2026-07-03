@@ -73,6 +73,24 @@ export class UsersService {
     return this.userModel.find(filter).sort({ createdAt: -1 }).exec();
   }
 
+  /** NV vận hành — QL ca / kế toán xem (không ADMIN owner) */
+  async findOperationalStaff(): Promise<UserDocument[]> {
+    return this.userModel
+      .find({
+        role: {
+          $in: [
+            Role.STAFF,
+            Role.KITCHEN,
+            Role.STORE_MANAGER,
+            Role.ACCOUNTING,
+            Role.WAREHOUSE,
+          ],
+        },
+      })
+      .sort({ role: 1, fullName: 1 })
+      .exec();
+  }
+
   async findById(id: string): Promise<UserDocument> {
     const user = await this.userModel.findById(id).exec();
     if (!user) {

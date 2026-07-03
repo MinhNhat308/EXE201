@@ -1,5 +1,6 @@
 import { apiRequest } from '@/lib/api';
 import { saveAuth, clearAuth } from '@/lib/auth-storage';
+import { endStaffSessionRemote } from '@/lib/staff-session-storage';
 import {
   AuthResponse,
   CreateEmployeePayload,
@@ -24,6 +25,7 @@ export const AuthController = {
   },
 
   logout() {
+    void endStaffSessionRemote();
     clearAuth();
   },
 
@@ -39,7 +41,35 @@ export const AuthController = {
       daysLeft: number;
       plan: string;
       status: string;
-    }>('/auth/session', { auth: true });
+    }>('/auth/session', { auth: true, cacheTtlMs: 60_000 });
+  },
+
+  async completeOnboarding(): Promise<{ tenant: Record<string, unknown> }> {
+    return apiRequest<{ tenant: Record<string, unknown> }>('/auth/onboarding/complete', {
+      method: 'POST',
+      auth: true,
+    });
+  },
+
+  async updateTenant(payload: {
+    storeName?: string;
+    trackInventory?: boolean;
+    posSugarChoiceEnabled?: boolean;
+    posIceChoiceEnabled?: boolean;
+    sugarLevels?: number[];
+    iceLevels?: number[];
+    taxCode?: string;
+    invoiceTemplate?: string;
+    invoiceSerial?: string;
+    vatRate?: number;
+    address?: string;
+    phone?: string;
+  }): Promise<{ tenant: Record<string, unknown> }> {
+    return apiRequest<{ tenant: Record<string, unknown> }>('/auth/tenant', {
+      method: 'PATCH',
+      auth: true,
+      body: JSON.stringify(payload),
+    });
   },
 };
 

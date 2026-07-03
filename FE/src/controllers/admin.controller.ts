@@ -17,11 +17,16 @@ export interface PaymentMethodConfig {
   description?: string;
   isActive: boolean;
   sortOrder: number;
+  qrImageUrl?: string;
+  bankAccountInfo?: string;
 }
 
 export const AdminMenuController = {
   getAll(): Promise<MenuItem[]> {
-    return apiRequest<MenuItem[]>('/menu?forStaff=false', { auth: true });
+    return apiRequest<MenuItem[]>('/menu?forStaff=false', {
+      auth: true,
+      cacheTtlMs: 60_000,
+    });
   },
 
   create(payload: Partial<MenuItem> & { toppingIds?: string[] }): Promise<MenuItem> {
@@ -50,7 +55,10 @@ export const AdminMenuController = {
 
 export const AdminToppingController = {
   getAll(): Promise<ToppingConfig[]> {
-    return apiRequest<ToppingConfig[]>('/toppings', { auth: true });
+    return apiRequest<ToppingConfig[]>('/toppings', {
+      auth: true,
+      cacheTtlMs: 60_000,
+    });
   },
 
   create(payload: {
@@ -83,8 +91,26 @@ export const AdminToppingController = {
 };
 
 export const AdminPaymentController = {
-  getAll(): Promise<PaymentMethodConfig[]> {
-    return apiRequest<PaymentMethodConfig[]>('/payment-methods', { auth: true });
+  getAll(includeQr = false): Promise<PaymentMethodConfig[]> {
+    const q = includeQr ? '?includeQr=true' : '';
+    return apiRequest<PaymentMethodConfig[]>(`/payment-methods${q}`, {
+      auth: true,
+      cacheTtlMs: 60_000,
+    });
+  },
+
+  getOne(id: string): Promise<PaymentMethodConfig> {
+    return apiRequest<PaymentMethodConfig>(`/payment-methods/${id}`, {
+      auth: true,
+      cacheTtlMs: 120_000,
+    });
+  },
+
+  getByCode(code: string): Promise<PaymentMethodConfig | null> {
+    return apiRequest<PaymentMethodConfig | null>(
+      `/payment-methods/by-code/${encodeURIComponent(code)}`,
+      { auth: true, cacheTtlMs: 120_000 },
+    );
   },
 
   create(payload: {
@@ -123,6 +149,13 @@ export const AdminPaymentController = {
 export const AdminUserController = {
   getAll(): Promise<User[]> {
     return apiRequest<User[]>('/users', { auth: true });
+  },
+
+  getOperational(): Promise<User[]> {
+    return apiRequest<User[]>('/users/operational', {
+      auth: true,
+      cacheTtlMs: 30_000,
+    });
   },
 
   create(payload: CreateEmployeePayload): Promise<User> {

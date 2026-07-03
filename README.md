@@ -78,17 +78,9 @@ Kế toán **duyệt** mọi phiếu trước khi cập nhật tồn.
 
 Dữ liệu demo cũ gắn tenant `teaflow-legacy` (slug dùng khi NV đăng nhập).
 
-### Tài khoản demo — 3 phân khúc (chủ cửa hàng / ADMIN)
+### Tài khoản demo — 3 phân khúc
 
-Đăng nhập tại `/login` (tab **Chủ cửa hàng**). Bấm nút demo để điền nhanh. **Khởi động lại BE** sau khi đổi `.env` để seed tài khoản mới.
-
-| Phân khúc | Email (ADMIN) | Mật khẩu | Slug |
-|-----------|---------------|----------|------|
-| **SOLO** — tự vận hành 1 mình | `demo-solo@bobapos.test` | `Demo@123` | `demo-solo` |
-| **STORE** — 1 CH + nhân viên | `demo-store@bobapos.test` | `Demo@123` | `demo-store` |
-| **CHAIN** — chuỗi đa chi nhánh | `demo-chain@bobapos.test` | `Demo@123` | `demo-chain` |
-
-**NV demo (tab Nhân viên):** `cashier` + slug `demo-store` · `cashier1` + slug `demo-chain` (mật khẩu `Demo@123`).
+Danh sách đầy đủ (chủ quán + nhân viên): **[TAI-KHOAN-DEMO.txt](./TAI-KHOAN-DEMO.txt)**. Seed tự chạy khi BE khởi động (trừ khi `SEED_DEMO_TENANTS=false`).
 
 
 

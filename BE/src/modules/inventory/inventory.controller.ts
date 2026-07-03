@@ -27,6 +27,7 @@ import { UpdateIngredientDto } from './dto/update-ingredient.dto';
 import { UpdateWarehouseDto } from './dto/update-warehouse.dto';
 import { UpdateWarehouseStockDto } from './dto/update-warehouse-stock.dto';
 import { UpsertRecipeDto } from './dto/upsert-recipe.dto';
+import { UpdateSoloRecipeDto } from './dto/update-solo-recipe.dto';
 import { InventoryService } from './inventory.service';
 import type { UserDocument } from '../users/schemas/user.schema';
 
@@ -38,8 +39,11 @@ export class InventoryController {
   @Get('warehouses')
   @RequireFeature(SaasFeature.WAREHOUSE)
   @Roles(Role.WAREHOUSE, Role.STORE_MANAGER, Role.ADMIN, Role.ACCOUNTING)
-  findWarehouses(@Query('all') all?: string) {
-    return this.inventoryService.findWarehouses(all === 'true');
+  findWarehouses(
+    @Query('all') all?: string,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.inventoryService.findWarehouses(all === 'true', branchId);
   }
 
   @Patch('warehouses/:id')
@@ -83,8 +87,11 @@ export class InventoryController {
   @Get('overview')
   @RequireFeature(SaasFeature.WAREHOUSE)
   @Roles(Role.WAREHOUSE, Role.STORE_MANAGER, Role.ADMIN, Role.ACCOUNTING)
-  getOverview(@Query('warehouseId') warehouseId?: string) {
-    return this.inventoryService.getWarehouseOverview(warehouseId);
+  getOverview(
+    @Query('warehouseId') warehouseId?: string,
+    @Query('branchId') branchId?: string,
+  ) {
+    return this.inventoryService.getWarehouseOverview(warehouseId, branchId);
   }
 
   @Get('usage/daily')
@@ -98,13 +105,20 @@ export class InventoryController {
     return this.inventoryService.getDailyUsage(d, warehouseId);
   }
 
+  @Get('pos-alerts')
+  @RequireFeature(SaasFeature.WAREHOUSE)
+  @Roles(Role.STAFF, Role.ADMIN, Role.STORE_MANAGER, Role.KITCHEN)
+  getPosAlerts() {
+    return this.inventoryService.getPosStockAlerts();
+  }
+
   @Get('ledger')
   @RequireFeature(SaasFeature.ACCOUNTING)
   @Roles(Role.ACCOUNTING, Role.ADMIN)
-  getLedger(@Query('month') month: string) {
+  getLedger(@Query('month') month: string, @Query('branchId') branchId?: string) {
     const m =
       month ?? new Date().toISOString().slice(0, 7);
-    return this.inventoryService.getDocumentLedger(m);
+    return this.inventoryService.getDocumentLedger(m, branchId);
   }
 
   @Get('ingredients')
@@ -142,11 +156,21 @@ export class InventoryController {
     return this.inventoryService.upsertRecipe(dto);
   }
 
+  @Patch('recipes/:menuItemId/solo')
+  @RequireFeature(SaasFeature.RECIPE)
+  @Roles(Role.ADMIN)
+  updateSoloRecipe(
+    @Param('menuItemId') menuItemId: string,
+    @Body() dto: UpdateSoloRecipeDto,
+  ) {
+    return this.inventoryService.updateSoloRecipe(menuItemId, dto);
+  }
+
   @Get('supplier-receipts')
   @RequireFeature(SaasFeature.ACCOUNTING)
   @Roles(Role.WAREHOUSE, Role.STORE_MANAGER, Role.ADMIN, Role.ACCOUNTING)
-  findReceipts() {
-    return this.inventoryService.findSupplierReceipts();
+  findReceipts(@Query('branchId') branchId?: string) {
+    return this.inventoryService.findSupplierReceipts(branchId);
   }
 
   @Post('supplier-receipts')
@@ -159,11 +183,25 @@ export class InventoryController {
     return this.inventoryService.createSupplierReceipt(dto, user);
   }
 
+  @Get('expiry-alerts')
+  @RequireFeature(SaasFeature.WAREHOUSE)
+  @Roles(Role.WAREHOUSE, Role.STORE_MANAGER, Role.ADMIN, Role.ACCOUNTING)
+  getExpiryAlerts(
+    @Query('withinDays') withinDays?: string,
+    @Query('branchId') branchId?: string,
+  ) {
+    const days = withinDays ? Number(withinDays) : 7;
+    return this.inventoryService.getExpiryAlerts(
+      Number.isFinite(days) ? days : 7,
+      branchId,
+    );
+  }
+
   @Get('operations-dashboard')
   @RequireFeature(SaasFeature.WAREHOUSE)
   @Roles(Role.WAREHOUSE, Role.STORE_MANAGER, Role.ADMIN, Role.ACCOUNTING)
-  getOperationsDashboard() {
-    return this.inventoryService.getOperationsDashboard();
+  getOperationsDashboard(@Query('branchId') branchId?: string) {
+    return this.inventoryService.getOperationsDashboard(branchId);
   }
 
   @Get('stock-requests/open-dispatch')
@@ -188,6 +226,7 @@ export class InventoryController {
     @Query('businessDate') businessDate?: string,
     @Query('returnClosureStatus') returnClosureStatus?: ReturnClosureStatus,
     @Query('parentRequestId') parentRequestId?: string,
+    @Query('branchId') branchId?: string,
   ) {
     return this.inventoryService.findStockRequests({
       status,
@@ -195,6 +234,7 @@ export class InventoryController {
       businessDate,
       returnClosureStatus,
       parentRequestId,
+      branchId,
     });
   }
 

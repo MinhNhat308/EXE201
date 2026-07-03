@@ -5,11 +5,27 @@ import { useMemo } from 'react';
 import {
   getStoredPlan,
   getStoredSubscription,
+  getStoredTenant,
   getSubscriptionStatus,
 } from '@/lib/auth-storage';
 import { planHasFeature } from '@/lib/plan-features';
+import {
+  isChainOperatingPlan,
+  isSoloOperatingPlan,
+  isStoreOperatingPlan,
+  STORE_CHECK_IN_PATH,
+  STORE_CASHIER_POS_PATH,
+  STORE_KITCHEN_ORDERS_PATH,
+  STORE_MANAGER_SHIFTS_PATH,
+  STORE_ACCOUNTING_SHIFTS_PATH,
+  STORE_SERVER_PATH,
+  STORE_SETTINGS_PATH,
+  STORE_REPORTS_PATH,
+} from '@/lib/workspace-routes';
 import { SaasFeature } from '@/models/saas-feature.model';
-import { SubscriptionPlan } from '@/models/tenant.model';
+import { SubscriptionPlan, TenantInfo } from '@/models/tenant.model';
+import { SEGMENT_BY_PLAN } from '@/lib/segments';
+import { PlanCallout } from '@/views/components/app-ui';
 import { SubscriptionCard } from '@/views/subscription/SubscriptionCard';
 import { AdminLayout } from './AdminLayout';
 
@@ -20,7 +36,64 @@ type ActionCard = {
   feature?: SaasFeature;
 };
 
-const QUICK_ACTIONS: ActionCard[] = [
+const STORE_QUICK: ActionCard[] = [
+  {
+    href: STORE_CHECK_IN_PATH,
+    title: 'Check-in ca',
+    desc: 'NV STAFF / Bếp chọn ca làm',
+    feature: SaasFeature.SHIFT_MGMT,
+  },
+  {
+    href: STORE_CASHIER_POS_PATH,
+    title: 'Mở POS thu ngân',
+    desc: 'Bán hàng, thanh toán, in hóa đơn',
+    feature: SaasFeature.POS,
+  },
+  {
+    href: STORE_KITCHEN_ORDERS_PATH,
+    title: 'Màn hình bếp',
+    desc: 'KDS — PENDING → READY',
+    feature: SaasFeature.KITCHEN,
+  },
+  {
+    href: STORE_REPORTS_PATH,
+    title: 'Báo cáo doanh thu',
+    desc: 'Đơn, doanh thu, món bán chạy',
+    feature: SaasFeature.BASIC_REPORTS,
+  },
+  {
+    href: STORE_SETTINGS_PATH,
+    title: 'Cài đặt quán',
+    desc: 'Tên quán, QR, đường/đá, kho',
+    feature: SaasFeature.STORE_SETTINGS,
+  },
+  {
+    href: STORE_MANAGER_SHIFTS_PATH,
+    title: 'Quản lý ca',
+    desc: 'Theo dõi ca & đơn hôm nay',
+    feature: SaasFeature.SHIFT_MGMT,
+  },
+];
+
+const CHAIN_QUICK: ActionCard[] = [
+  {
+    href: '/dashboard/admin/branches',
+    title: 'Chi nhánh',
+    desc: '4 CN — chuyển xem từng quán',
+    feature: SaasFeature.MULTI_BRANCH,
+  },
+  {
+    href: '/dashboard/admin/chain-reports',
+    title: 'Tổng hợp chuỗi',
+    desc: 'Doanh thu tất cả chi nhánh',
+    feature: SaasFeature.MULTI_BRANCH,
+  },
+  {
+    href: '/dashboard/admin/reports',
+    title: 'Báo cáo chi nhánh',
+    desc: 'Chi tiết theo CN đang chọn',
+    feature: SaasFeature.BASIC_REPORTS,
+  },
   {
     href: '/dashboard/staff/cashier',
     title: 'Mở POS thu ngân',
@@ -33,28 +106,142 @@ const QUICK_ACTIONS: ActionCard[] = [
     desc: 'Xử lý đơn PENDING → READY',
     feature: SaasFeature.KITCHEN,
   },
+];
+
+const STORE_SECTIONS: { title: string; cards: ActionCard[] }[] = [
   {
-    href: '/dashboard/manager/orders',
-    title: 'Đơn theo ca',
-    desc: 'Theo dõi doanh thu & trạng thái',
-    feature: SaasFeature.SHIFT_MGMT,
+    title: 'Vận hành trong ngày',
+    cards: [
+      {
+        href: STORE_CHECK_IN_PATH,
+        title: 'Check-in ca',
+        desc: 'NV STAFF / Bếp chọn ca',
+        feature: SaasFeature.SHIFT_MGMT,
+      },
+      {
+        href: STORE_CASHIER_POS_PATH,
+        title: 'Thu ngân POS',
+        desc: 'Bán hàng & thanh toán',
+        feature: SaasFeature.POS,
+      },
+      {
+        href: STORE_SERVER_PATH,
+        title: 'Phục vụ',
+        desc: 'Giao món READY → COMPLETED',
+        feature: SaasFeature.POS,
+      },
+      {
+        href: STORE_KITCHEN_ORDERS_PATH,
+        title: 'Bếp KDS',
+        desc: 'Kanban chế biến đơn',
+        feature: SaasFeature.KITCHEN,
+      },
+    ],
   },
   {
-    href: '/dashboard/admin/menu',
-    title: 'Quản lý menu',
-    desc: 'Món, giá, topping',
-    feature: SaasFeature.MENU,
+    title: 'Vận hành cửa hàng',
+    cards: [
+      {
+        href: STORE_MANAGER_SHIFTS_PATH,
+        title: 'Quản lý ca NV',
+        desc: 'QL ca & kế toán theo dõi ca làm',
+        feature: SaasFeature.SHIFT_MGMT,
+      },
+      {
+        href: '/dashboard/manager/orders',
+        title: 'Đơn hàng ca',
+        desc: 'Theo dõi trạng thái đơn',
+        feature: SaasFeature.SHIFT_MGMT,
+      },
+      {
+        href: '/dashboard/manager/issue',
+        title: 'Cấp phát ca',
+        desc: 'Xuất kho đầu ca',
+        feature: SaasFeature.SHIFT_MGMT,
+      },
+      {
+        href: '/dashboard/manager/returns',
+        title: 'Hoàn trả ca',
+        desc: 'Thu hồi cuối ca',
+        feature: SaasFeature.SHIFT_MGMT,
+      },
+    ],
+  },
+  {
+    title: 'Kho & kế toán',
+    cards: [
+      {
+        href: STORE_ACCOUNTING_SHIFTS_PATH,
+        title: 'Ca & vận hành (KT)',
+        desc: 'Kế toán theo dõi ca nhân viên',
+        feature: SaasFeature.ACCOUNTING,
+      },
+      {
+        href: '/dashboard/accounting/supplier',
+        title: 'Nhập NCC',
+        desc: 'Vào kho tổng',
+        feature: SaasFeature.ACCOUNTING,
+      },
+      {
+        href: '/dashboard/accounting/stock',
+        title: 'Tồn kho',
+        desc: 'Kế toán quản lý kho Store',
+        feature: SaasFeature.ACCOUNTING,
+      },
+      {
+        href: '/dashboard/admin/recipes',
+        title: 'Công thức',
+        desc: 'Định lượng món',
+        feature: SaasFeature.RECIPE,
+      },
+    ],
+  },
+  {
+    title: 'Cấu hình & nhân sự',
+    cards: [
+      {
+        href: STORE_SETTINGS_PATH,
+        title: 'Cài đặt quán',
+        desc: 'Tên, QR, POS đường/đá',
+        feature: SaasFeature.STORE_SETTINGS,
+      },
+      {
+        href: STORE_REPORTS_PATH,
+        title: 'Báo cáo doanh thu',
+        desc: 'Thống kê theo ca',
+        feature: SaasFeature.BASIC_REPORTS,
+      },
+      {
+        href: '/dashboard/admin/menu',
+        title: 'Menu',
+        desc: 'Món và giá bán',
+        feature: SaasFeature.MENU,
+      },
+      {
+        href: '/dashboard/admin/employees',
+        title: 'Nhân viên',
+        desc: 'Username, mật khẩu & vai trò',
+        feature: SaasFeature.EMPLOYEES,
+      },
+      {
+        href: '/dashboard/admin/warehouses',
+        title: 'Cấu hình kho',
+        desc: 'KHO_TONG, KHO1–3',
+        feature: SaasFeature.WAREHOUSE,
+      },
+      { href: '/dashboard/admin/subscription', title: 'Gói BOBAPOS', desc: 'Solo / Store / Chain' },
+    ],
   },
 ];
 
-const SECTIONS: { title: string; cards: ActionCard[] }[] = [
+const CHAIN_SECTIONS: { title: string; cards: ActionCard[] }[] = [
   {
     title: 'Vận hành hàng ngày',
     cards: [
       {
-        href: '/dashboard/staff/setup',
-        title: 'Chọn ca',
-        desc: 'Ca sáng / trưa / chiều / tối',
+        href: '/dashboard/check-in',
+        title: 'Check-in ca',
+        desc: 'NV STAFF / Bếp chọn ca',
         feature: SaasFeature.SHIFT_MGMT,
       },
       {
@@ -75,18 +262,6 @@ const SECTIONS: { title: string; cards: ActionCard[] }[] = [
         desc: 'Chế biến đơn',
         feature: SaasFeature.KITCHEN,
       },
-      {
-        href: '/dashboard/manager/issue',
-        title: 'Cấp phát ca',
-        desc: 'Xuất kho đầu ca',
-        feature: SaasFeature.SHIFT_MGMT,
-      },
-      {
-        href: '/dashboard/manager/returns',
-        title: 'Hoàn trả ca',
-        desc: 'Thu hồi cuối ca',
-        feature: SaasFeature.SHIFT_MGMT,
-      },
     ],
   },
   {
@@ -94,27 +269,50 @@ const SECTIONS: { title: string; cards: ActionCard[] }[] = [
     cards: [
       {
         href: '/dashboard/warehouse/stock',
-        title: 'Tồn kho',
-        desc: 'Theo từng kho',
+        title: 'Tồn kho đa CN',
+        desc: 'Theo chi nhánh & kho',
         feature: SaasFeature.WAREHOUSE,
       },
       {
         href: '/dashboard/accounting/supplier',
         title: 'Nhập NCC',
-        desc: 'Vào kho tổng',
+        desc: 'KHO_TONG từng chi nhánh',
         feature: SaasFeature.ACCOUNTING,
       },
       {
         href: '/dashboard/accounting/requests',
         title: 'Duyệt phiếu',
-        desc: 'Phê duyệt xuất/nhập',
+        desc: 'Cấp phát / bổ sung',
         feature: SaasFeature.ACCOUNTING,
       },
       {
-        href: '/dashboard/admin/recipes',
-        title: 'Công thức',
-        desc: 'Định lượng món',
-        feature: SaasFeature.RECIPE,
+        href: '/dashboard/accounting/reports',
+        title: 'Báo cáo kế toán',
+        desc: 'Doanh thu & kho',
+        feature: SaasFeature.BASIC_REPORTS,
+      },
+    ],
+  },
+  {
+    title: 'Quản lý chuỗi',
+    cards: [
+      {
+        href: '/dashboard/admin/branches',
+        title: 'Chi nhánh',
+        desc: 'MAIN + CN-Q1/Q7/TD',
+        feature: SaasFeature.MULTI_BRANCH,
+      },
+      {
+        href: '/dashboard/admin/chain-reports',
+        title: 'So sánh CN',
+        desc: 'Doanh thu tập trung',
+        feature: SaasFeature.MULTI_BRANCH,
+      },
+      {
+        href: '/dashboard/manager/orders',
+        title: 'Đơn theo ca',
+        desc: 'Theo dõi vận hành',
+        feature: SaasFeature.SHIFT_MGMT,
       },
     ],
   },
@@ -133,12 +331,6 @@ const SECTIONS: { title: string; cards: ActionCard[] }[] = [
         desc: 'Tài khoản & phân quyền',
         feature: SaasFeature.EMPLOYEES,
       },
-      {
-        href: '/dashboard/admin/warehouses',
-        title: 'Cấu hình kho',
-        desc: 'KHO_TONG, KHO1–3',
-        feature: SaasFeature.WAREHOUSE,
-      },
       { href: '/dashboard/admin/subscription', title: 'Gói BOBAPOS', desc: 'Solo / Store / Chain' },
     ],
   },
@@ -150,33 +342,58 @@ function filterCards(cards: ActionCard[], plan: string, status: string) {
 
 export function AdminHomeView() {
   const sub = getStoredSubscription<{ plan?: string }>();
+  const tenant = getStoredTenant<TenantInfo>();
   const plan = getStoredPlan() ?? sub?.plan ?? SubscriptionPlan.STANDARD;
   const status = getSubscriptionStatus() ?? 'ACTIVE';
+  const storePlan = isStoreOperatingPlan(tenant, plan);
+  const soloPlan = isSoloOperatingPlan(tenant, plan);
+  const chainPlan = isChainOperatingPlan(tenant, plan);
 
   const quickActions = useMemo(
-    () => filterCards(QUICK_ACTIONS, plan, status),
-    [plan, status],
+    () => filterCards(storePlan ? STORE_QUICK : CHAIN_QUICK, plan, status),
+    [plan, status, storePlan],
   );
 
   const sections = useMemo(
     () =>
-      SECTIONS.map((s) => ({
-        ...s,
-        cards: filterCards(s.cards, plan, status),
-      })).filter((s) => s.cards.length > 0),
-    [plan, status],
+      (storePlan ? STORE_SECTIONS : CHAIN_SECTIONS)
+        .map((s) => ({
+          ...s,
+          cards: filterCards(s.cards, plan, status),
+        }))
+        .filter((s) => s.cards.length > 0),
+    [plan, status, storePlan],
   );
-
-  const isSolo = plan === SubscriptionPlan.SOLO && status !== 'TRIAL';
 
   return (
     <AdminLayout>
       <div className="mx-auto max-w-6xl">
-        <h1 className="text-2xl font-bold tracking-tight text-stone-900">Xin chào, chủ cửa hàng</h1>
+        {chainPlan && (
+          <PlanCallout segment={SEGMENT_BY_PLAN[SubscriptionPlan.PREMIUM]} title="Chuỗi demo · 4 chi nhánh">
+            Dùng dropdown <strong>Chi nhánh đang xem</strong> ở sidebar để xem kho, báo cáo CN và đơn
+            ca theo từng cửa hàng. Mã NV: <span className="font-mono font-semibold">{tenant?.slug}</span>
+          </PlanCallout>
+        )}
+
+        {storePlan && tenant?.slug && (
+          <PlanCallout segment={SEGMENT_BY_PLAN[SubscriptionPlan.STANDARD]} title="Mã cửa hàng cho nhân viên">
+            <span className="font-mono text-lg font-bold">{tenant.slug}</span>
+            <p className="mt-2">
+              NV đăng nhập bằng username + mã cửa hàng. STAFF chọn Thu ngân/Phục vụ khi check-in ca;
+              Bếp vào thẳng màn KDS sau check-in.
+            </p>
+          </PlanCallout>
+        )}
+
+        <h1 className="text-2xl font-bold tracking-tight text-stone-900">
+          {storePlan ? 'Hub cửa hàng Store' : soloPlan ? 'Cài đặt' : 'Xin chào, chủ cửa hàng'}
+        </h1>
         <p className="mt-1 text-stone-500">
-          {isSolo
-            ? 'Gói Solo — đủ POS, bếp, kho & công thức cho chủ tự vận hành. Nâng cấp Store để thêm nhân viên, ca và kế toán.'
-            : 'BOBAPOS — bán hàng, bếp, kho và kế toán trên một hệ thống.'}
+          {storePlan
+            ? 'Quản trị nhân sự, ca làm, menu và kho — nhân viên có màn làm việc riêng sau khi đăng nhập.'
+            : soloPlan
+              ? 'Gói Solo — dùng Hub Solo để bán hàng hàng ngày.'
+              : 'BOBAPOS Chain — quản trị chuỗi, nhân sự và báo cáo tập trung.'}
         </p>
 
         {quickActions.length > 0 && (

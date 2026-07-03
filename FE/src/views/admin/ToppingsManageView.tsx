@@ -165,7 +165,7 @@ export function ToppingsManageView() {
             <button type="button" onClick={() => setModalOpen(false)} className="flex-1 rounded-xl border py-2">
               Hủy
             </button>
-            <button type="submit" className="flex-1 rounded-xl bg-amber-500 py-2 font-bold text-white">
+            <button type="submit" className="flex-1 rounded-xl bg-[#2F80ED] py-2 font-bold text-white">
               Lưu
             </button>
           </div>

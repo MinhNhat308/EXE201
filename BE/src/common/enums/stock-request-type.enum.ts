@@ -8,7 +8,7 @@ export enum StockRequestType {
 }
 
 export const STOCK_REQUEST_TYPE_LABELS: Record<StockRequestType, string> = {
-  [StockRequestType.DISPATCH_FROM_CENTRAL]: 'Cấp phát trong ngày (kho tổng → kho con)',
-  [StockRequestType.RETURN_TO_CENTRAL]: 'Hoàn trả cuối ngày (kho con → kho tổng)',
+  [StockRequestType.DISPATCH_FROM_CENTRAL]: 'Cấp phát / bàn giao ca (kho tổng → kho con)',
+  [StockRequestType.RETURN_TO_CENTRAL]: 'Thu hồi về kho tổng (tuỳ chọn)',
   [StockRequestType.REPLENISH_FROM_CENTRAL]: 'Bổ sung tồn (kho tổng → kho lẻ)',
 };

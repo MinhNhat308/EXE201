@@ -62,7 +62,7 @@ export function ToppingModal({ item, onClose, onConfirm }: ToppingModalProps) {
                     onClick={() => toggle(topping)}
                     className={`flex items-center justify-between rounded-xl border-2 px-4 py-3 text-left transition ${
                       isOn
-                        ? 'border-amber-500 bg-amber-50'
+                        ? 'border-[#2F80ED] bg-amber-50'
                         : 'border-stone-100 hover:border-amber-200'
                     }`}
                   >
@@ -70,7 +70,7 @@ export function ToppingModal({ item, onClose, onConfirm }: ToppingModalProps) {
                       <span
                         className={`flex h-5 w-5 items-center justify-center rounded-md border-2 text-xs ${
                           isOn
-                            ? 'border-amber-500 bg-amber-500 text-white'
+                            ? 'border-[#2F80ED] bg-[#2F80ED] text-white'
                             : 'border-stone-300'
                         }`}
                       >
@@ -100,7 +100,7 @@ export function ToppingModal({ item, onClose, onConfirm }: ToppingModalProps) {
             type="button"
             onClick={() => onConfirm(selected)}
             disabled={available.length > 0 && selected.length === 0}
-            className="flex-1 rounded-xl bg-amber-500 py-3 text-sm font-bold text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-40"
+            className="flex-1 rounded-xl bg-[#2F80ED] py-3 text-sm font-bold text-white transition hover:bg-[#2569c7] disabled:cursor-not-allowed disabled:opacity-40"
           >
             Thêm
           </button>

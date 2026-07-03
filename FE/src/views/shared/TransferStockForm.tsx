@@ -2,10 +2,11 @@
 
 import { FormEvent, useEffect, useState } from 'react';
 import { InventoryController } from '@/controllers/inventory.controller';
+import { useBranchWarehouses } from '@/lib/use-branch-warehouses';
 import { Ingredient, WarehouseLocation } from '@/models/inventory.model';
 
 export function TransferStockForm() {
-  const [warehouses, setWarehouses] = useState<WarehouseLocation[]>([]);
+  const { warehouses, version } = useBranchWarehouses();
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [fromId, setFromId] = useState('');
   const [toId, setToId] = useState('');
@@ -16,18 +17,14 @@ export function TransferStockForm() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    Promise.all([
-      InventoryController.getWarehouses(),
-      InventoryController.getIngredients(),
-    ]).then(([whs, ings]) => {
-      setWarehouses(whs);
+    InventoryController.getIngredients().then((ings) => {
       setIngredients(ings);
-      const kho2 = whs.find((w) => w.code === 'KHO2');
-      const kho1 = whs.find((w) => w.isKitchenSource);
+      const kho2 = warehouses.find((w) => w.code.endsWith('_KHO2') || w.code === 'KHO2');
+      const kho1 = warehouses.find((w) => w.isKitchenSource);
       if (kho2) setFromId(kho2.id);
       if (kho1) setToId(kho1.id);
     });
-  }, []);
+  }, [warehouses, version]);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();

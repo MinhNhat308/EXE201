@@ -1,13 +1,14 @@
 import { IngredientCategory } from '../common/enums/ingredient-category.enum';
 import { MENU_IMAGE_BY_NAME } from '../modules/menu/menu-images';
+import type {
+  DemoIngredientSeed,
+  DemoInventoryPack,
+  DemoStockLine,
+} from './demo-inventory.types';
 
-export type DemoIngredientSeed = {
-  name: string;
-  category: IngredientCategory;
-  sku: string;
-};
+export type { DemoIngredientSeed, DemoStockLine } from './demo-inventory.types';
 
-export const DEMO_INGREDIENTS: DemoIngredientSeed[] = [
+const SOLO_INGREDIENTS: DemoIngredientSeed[] = [
   { name: 'Nước trà đen (pha sẵn)', category: IngredientCategory.LIQUID, sku: 'NL-TRA-DEN' },
   { name: 'Nước trà xanh (pha sẵn)', category: IngredientCategory.LIQUID, sku: 'NL-TRA-XANH' },
   { name: 'Nước lọc', category: IngredientCategory.LIQUID, sku: 'NL-LOC' },
@@ -30,14 +31,8 @@ export const DEMO_INGREDIENTS: DemoIngredientSeed[] = [
   { name: 'Đá viên', category: IngredientCategory.OTHER, sku: 'KHAC-DA' },
 ];
 
-export type DemoStockLine = {
-  ingredient: string;
-  currentStock: number;
-  minStock: number;
-};
-
 /** Phân bổ tồn theo kho — có vài mặt hàng sắp hết để demo cảnh báo */
-export const DEMO_STOCK_BY_WAREHOUSE: Record<string, DemoStockLine[]> = {
+const SOLO_STOCK_BY_WAREHOUSE: Record<string, DemoStockLine[]> = {
   KHO_TONG: [
     { ingredient: 'Đường', currentStock: 48_000, minStock: 5_000 },
     { ingredient: 'Đường đen (đường phèn)', currentStock: 22_000, minStock: 3_000 },
@@ -79,7 +74,7 @@ export const DEMO_STOCK_BY_WAREHOUSE: Record<string, DemoStockLine[]> = {
   ],
 };
 
-export const DEMO_TOPPINGS = [
+const SOLO_TOPPINGS = [
   { name: 'Trân châu đen', price: 5_000, sortOrder: 1 },
   { name: 'Trân châu trắng', price: 5_000, sortOrder: 2 },
   { name: 'Thạch dừa', price: 5_000, sortOrder: 3 },
@@ -88,7 +83,7 @@ export const DEMO_TOPPINGS = [
   { name: 'Đậu đỏ', price: 5_000, sortOrder: 6 },
 ];
 
-export const DEMO_MENU_ITEMS = [
+const SOLO_MENU_ITEMS = [
   {
     name: 'Trà sữa trân châu đường đen',
     category: 'Trà sữa',
@@ -175,10 +170,7 @@ export const DEMO_MENU_ITEMS = [
   },
 ];
 
-export const DEMO_RECIPES: {
-  menuName: string;
-  lines: { ingredient: string; quantity: number }[];
-}[] = [
+const SOLO_RECIPES = [
   {
     menuName: 'Trà sữa trân châu đường đen',
     lines: [
@@ -235,11 +227,66 @@ export const DEMO_RECIPES: {
       { ingredient: 'Đá viên', quantity: 200 },
     ],
   },
+  {
+    menuName: 'Trà sữa oolong',
+    lines: [
+      { ingredient: 'Nước trà đen (pha sẵn)', quantity: 200 },
+      { ingredient: 'Sữa tươi', quantity: 100 },
+      { ingredient: 'Đường', quantity: 18 },
+      { ingredient: 'Trân châu đen', quantity: 45 },
+      { ingredient: 'Đá viên', quantity: 140 },
+    ],
+  },
+  {
+    menuName: 'Trà sữa khoai môn',
+    lines: [
+      { ingredient: 'Sữa tươi', quantity: 160 },
+      { ingredient: 'Bột khoai môn', quantity: 30 },
+      { ingredient: 'Đường', quantity: 22 },
+      { ingredient: 'Đá viên', quantity: 150 },
+    ],
+  },
+  {
+    menuName: 'Trà vải',
+    lines: [
+      { ingredient: 'Nước trà xanh (pha sẵn)', quantity: 200 },
+      { ingredient: 'Syrup vải', quantity: 40 },
+      { ingredient: 'Đường', quantity: 12 },
+      { ingredient: 'Đá viên', quantity: 170 },
+    ],
+  },
+  {
+    menuName: 'Trà chanh leo',
+    lines: [
+      { ingredient: 'Nước lọc', quantity: 120 },
+      { ingredient: 'Puree chanh leo', quantity: 50 },
+      { ingredient: 'Đường', quantity: 15 },
+      { ingredient: 'Đá viên', quantity: 160 },
+    ],
+  },
+  {
+    menuName: 'Trà xanh kem cheese',
+    lines: [
+      { ingredient: 'Nước trà xanh (pha sẵn)', quantity: 210 },
+      { ingredient: 'Kem cheese', quantity: 38 },
+      { ingredient: 'Đường', quantity: 18 },
+      { ingredient: 'Đá viên', quantity: 120 },
+    ],
+  },
+  {
+    menuName: 'Cacao sữa',
+    lines: [
+      { ingredient: 'Bột cacao', quantity: 18 },
+      { ingredient: 'Sữa tươi', quantity: 200 },
+      { ingredient: 'Đường', quantity: 18 },
+      { ingredient: 'Đá viên', quantity: 100 },
+    ],
+  },
 ];
 
-export const DEMO_SUPPLIER_RECEIPT = {
+const SOLO_SUPPLIER_RECEIPT = {
   supplierName: 'Công ty TNHH Nguyên liệu BOBA Việt',
-  documentNumber: 'DEMO-NCC-2026-001',
+  documentNumber: 'SOLO-NCC-2026-001',
   warehouseCode: 'KHO_TONG',
   note: 'Nhập đầu tháng — demo thuyết trình',
   lines: [
@@ -249,3 +296,21 @@ export const DEMO_SUPPLIER_RECEIPT = {
     { ingredient: 'Syrup đào', quantity: 8_000, unitPrice: 95_000 },
   ],
 };
+
+/** Catalog đầy đủ cho demo-solo & demo-chain */
+export const SOLO_DEMO_PACK: DemoInventoryPack = {
+  ingredients: SOLO_INGREDIENTS,
+  stockByWarehouse: SOLO_STOCK_BY_WAREHOUSE,
+  toppings: SOLO_TOPPINGS,
+  menuItems: SOLO_MENU_ITEMS,
+  recipes: SOLO_RECIPES,
+  supplierReceipt: SOLO_SUPPLIER_RECEIPT,
+};
+
+/** @deprecated dùng SOLO_DEMO_PACK — giữ cho import cũ */
+export const DEMO_INGREDIENTS = SOLO_INGREDIENTS;
+export const DEMO_STOCK_BY_WAREHOUSE = SOLO_STOCK_BY_WAREHOUSE;
+export const DEMO_TOPPINGS = SOLO_TOPPINGS;
+export const DEMO_MENU_ITEMS = SOLO_MENU_ITEMS;
+export const DEMO_RECIPES = SOLO_RECIPES;
+export const DEMO_SUPPLIER_RECEIPT = SOLO_SUPPLIER_RECEIPT;

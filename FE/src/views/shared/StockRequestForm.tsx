@@ -3,6 +3,7 @@
 import { FormEvent, useEffect, useState } from 'react';
 import { BRAND } from '@/lib/brand';
 import { InventoryController } from '@/controllers/inventory.controller';
+import { useBranchWarehouses } from '@/lib/use-branch-warehouses';
 import { Ingredient, WarehouseLocation } from '@/models/inventory.model';
 import {
   STOCK_REQUEST_TYPE_LABELS,
@@ -25,6 +26,7 @@ export function StockRequestForm({
 }) {
   const isReturn = type === StockRequestType.RETURN_TO_CENTRAL;
   const isReplenish = type === StockRequestType.REPLENISH_FROM_CENTRAL;
+  const { warehouses: branchWarehouses, version } = useBranchWarehouses();
   const [warehouses, setWarehouses] = useState<WarehouseLocation[]>([]);
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
   const [openDispatch, setOpenDispatch] = useState<StockTransferRequest[]>([]);
@@ -43,17 +45,14 @@ export function StockRequestForm({
   });
 
   useEffect(() => {
-    Promise.all([
-      InventoryController.getWarehouses(),
-      InventoryController.getIngredients(),
-    ]).then(([whs, ings]) => {
-      const sub = whs.filter((w) => !w.isCentralWarehouse);
-      setWarehouses(sub);
+    const sub = branchWarehouses.filter((w) => !w.isCentralWarehouse);
+    setWarehouses(sub);
+    InventoryController.getIngredients().then((ings) => {
       setIngredients(ings);
       const kho1 = sub.find((w) => w.isKitchenSource) ?? sub[0];
       if (kho1) setTargetId(kho1.id);
     });
-  }, []);
+  }, [branchWarehouses, version]);
 
   useEffect(() => {
     if (!isReturn || !targetId) {
@@ -138,10 +137,10 @@ export function StockRequestForm({
       </p>
       <p className="text-xs text-stone-500">
         {isReturn
-          ? 'Cuối ca: hoàn trả gắn đúng mã phiếu cấp phát — số lượng không vượt phần còn lại.'
+          ? 'Tuỳ chọn: thu hồi phần còn lại về KHO_TONG — không bắt buộc cuối ca.'
           : isReplenish
-            ? 'Luồng kho: bổ sung tồn kho lẻ — không yêu cầu hoàn trả cuối ca.'
-            : 'Đầu ca (quản lý): xin cấp phát từ kho tổng — cuối ca bắt buộc hoàn trả.'}
+            ? 'Bổ sung tồn kho lẻ — phần dư bàn giao ca sau.'
+            : 'Đầu ca: cấp phát từ kho tổng — phần chưa dùng giữ tại kho con cho ca sau.'}
       </p>
 
       {error && <p className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">{error}</p>}

@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Post } from '@nestjs/common';
+import { Body, Controller, Get, Patch, Post } from '@nestjs/common';
 
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { Public } from '../../common/decorators/public.decorator';
@@ -6,6 +6,7 @@ import { SkipSubscription } from '../../common/decorators/skip-subscription.deco
 import type { UserDocument } from '../users/schemas/user.schema';
 import { AuthService } from './auth.service';
 import { LoginDto } from './dto/login.dto';
+import { UpdateTenantDto } from './dto/update-tenant.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -21,6 +22,18 @@ export class AuthController {
   @SkipSubscription()
   session(@CurrentUser() user: UserDocument) {
     return this.authService.getSessionContext(user);
+  }
+
+  @Post('onboarding/complete')
+  @SkipSubscription()
+  completeOnboarding(@CurrentUser() user: UserDocument) {
+    return this.authService.completeOnboarding(user);
+  }
+
+  @Patch('tenant')
+  @SkipSubscription()
+  updateTenant(@CurrentUser() user: UserDocument, @Body() dto: UpdateTenantDto) {
+    return this.authService.updateTenant(user, dto);
   }
 }
 

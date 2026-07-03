@@ -19,7 +19,7 @@ export function OrderGridCard({ order, onClick, selected }: OrderGridCardProps) 
       onClick={onClick}
       className={`w-full rounded-2xl border-2 bg-white p-4 text-left shadow-sm transition hover:shadow-md ${
         selected
-          ? 'border-amber-500 ring-2 ring-amber-200'
+          ? 'border-[#2F80ED] ring-2 ring-amber-200'
           : 'border-stone-100 hover:border-amber-200'
       }`}
     >

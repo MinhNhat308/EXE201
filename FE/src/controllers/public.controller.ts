@@ -1,6 +1,6 @@
 import { apiRequest } from '@/lib/api';
 import { AuthResponse } from '@/models/user.model';
-import { BusinessModel } from '@/models/tenant.model';
+import { SubscriptionPlan } from '@/models/tenant.model';
 
 export const PublicController = {
   getPlans() {
@@ -19,7 +19,7 @@ export const PublicController = {
 
   register(payload: {
     storeName: string;
-    businessModel: BusinessModel;
+    intendedPlan: SubscriptionPlan;
     ownerName: string;
     email: string;
     password: string;

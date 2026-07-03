@@ -2,14 +2,16 @@ import { ConflictException, Injectable } from '@nestjs/common';
 import { InjectModel } from '@nestjs/mongoose';
 import * as bcrypt from 'bcrypt';
 import { Model } from 'mongoose';
-import { BusinessModel } from '../../common/enums/business-model.enum';
 import { Role } from '../../common/enums/role.enum';
 import { SubscriptionPlan } from '../../common/enums/subscription-plan.enum';
+import { planLabel } from '../../common/saas/plan-features';
 import { PLAN_LIMITS, PLAN_PRICING_VND } from '../../common/saas/plan-limits';
+import { businessModelFromPlan } from '../../common/saas/segment-plan';
 import { AuthService } from '../auth/auth.service';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 import { TenantOnboardingService } from '../tenants/tenant-onboarding.service';
 import { TenantsService } from '../tenants/tenants.service';
+import { DemoInventorySeedService } from '../../seed/demo-inventory.seed.service';
 import { User, UserDocument } from '../users/schemas/user.schema';
 import { RegisterTenantDto } from './dto/register-tenant.dto';
 
@@ -20,6 +22,7 @@ export class PublicService {
     private readonly tenantsService: TenantsService,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly onboardingService: TenantOnboardingService,
+    private readonly demoInventorySeed: DemoInventorySeedService,
     private readonly authService: AuthService,
   ) {}
 
@@ -29,7 +32,7 @@ export class PublicService {
       plans: [
         {
           id: SubscriptionPlan.SOLO,
-          name: 'BOBAPOS Solo',
+          name: planLabel(SubscriptionPlan.SOLO),
           priceMonthly: PLAN_PRICING_VND[SubscriptionPlan.SOLO],
           maxEmployees: PLAN_LIMITS[SubscriptionPlan.SOLO].maxEmployees,
           maxBranches: PLAN_LIMITS[SubscriptionPlan.SOLO].maxBranches,
@@ -43,7 +46,7 @@ export class PublicService {
         },
         {
           id: SubscriptionPlan.STANDARD,
-          name: 'BOBAPOS Store',
+          name: planLabel(SubscriptionPlan.STANDARD),
           priceMonthly: PLAN_PRICING_VND[SubscriptionPlan.STANDARD],
           maxEmployees: PLAN_LIMITS[SubscriptionPlan.STANDARD].maxEmployees,
           maxBranches: PLAN_LIMITS[SubscriptionPlan.STANDARD].maxBranches,
@@ -57,7 +60,7 @@ export class PublicService {
         },
         {
           id: SubscriptionPlan.PREMIUM,
-          name: 'BOBAPOS Chain',
+          name: planLabel(SubscriptionPlan.PREMIUM),
           priceMonthly: PLAN_PRICING_VND[SubscriptionPlan.PREMIUM],
           maxEmployees: PLAN_LIMITS[SubscriptionPlan.PREMIUM].maxEmployees,
           maxBranches: PLAN_LIMITS[SubscriptionPlan.PREMIUM].maxBranches,
@@ -72,12 +75,6 @@ export class PublicService {
     };
   }
 
-  suggestPlan(model: BusinessModel) {
-    return model === BusinessModel.LARGE
-      ? SubscriptionPlan.PREMIUM
-      : SubscriptionPlan.STANDARD;
-  }
-
   async register(dto: RegisterTenantDto) {
     const email = dto.email.toLowerCase();
     const existing = await this.userModel.findOne({ email }).exec();
@@ -85,16 +82,18 @@ export class PublicService {
       throw new ConflictException('Email đã được sử dụng');
     }
 
-    const suggested = this.suggestPlan(dto.businessModel);
+    const intendedPlan = dto.intendedPlan;
     const tenant = await this.tenantsService.createTrialTenant({
       storeName: dto.storeName,
-      businessModel: dto.businessModel,
-      suggestedPlan: suggested,
+      intendedPlan,
+      businessModel: businessModelFromPlan(intendedPlan),
       phone: dto.phone,
     });
 
     await this.subscriptionsService.createTrialSubscription(tenant._id.toString());
     await this.onboardingService.seedTenantData(tenant._id.toString());
+    await this.demoInventorySeed.enrichTenant(tenant._id.toString(), tenant.slug);
+    await this.tenantsService.markOnboardingComplete(tenant._id.toString());
 
     const hashed = await bcrypt.hash(dto.password, 10);
     const owner = await this.userModel.create({

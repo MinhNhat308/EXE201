@@ -3,24 +3,36 @@
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { getStoredUser } from '@/lib/auth-storage';
-import { isStoreOwner } from '@/lib/role-access';
-import { getStaffSession, resolveStaffSession } from '@/lib/staff-session-storage';
-import { WorkRole } from '@/models/staff.model';
-import { STAFF_ROUTES } from '@/models/staff.model';
+import { getStaffSession } from '@/lib/staff-session-storage';
+import {
+  getPrimaryWorkspacePath,
+  getWorkPathAfterCheckIn,
+  STORE_CHECK_IN_PATH,
+} from '@/lib/workspace-routes';
+import { Role } from '@/models/user.model';
 
 export function StaffHubView() {
   const router = useRouter();
 
   useEffect(() => {
-    const user = getStoredUser<{ role: string }>();
-    const session =
-      getStaffSession() ??
-      (isStoreOwner(user?.role) ? resolveStaffSession(WorkRole.CASHIER) : null);
-    if (!session) {
-      router.replace('/dashboard/staff/setup');
+    const user = getStoredUser<{ role: Role }>();
+    if (!user) {
+      router.replace('/login');
       return;
     }
-    router.replace(STAFF_ROUTES[session.workRole]);
+
+    if (user.role !== Role.STAFF) {
+      router.replace(getPrimaryWorkspacePath(user.role));
+      return;
+    }
+
+    const session = getStaffSession();
+    if (!session || session.checkedInRole !== Role.STAFF) {
+      router.replace(STORE_CHECK_IN_PATH);
+      return;
+    }
+
+    router.replace(getWorkPathAfterCheckIn(Role.STAFF, session.workRole));
   }, [router]);
 
   return (

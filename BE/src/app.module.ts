@@ -34,12 +34,20 @@ import { ToppingsModule } from './modules/toppings/toppings.module';
 
 import { InventoryModule } from './modules/inventory/inventory.module';
 
+import { ShiftsModule } from './modules/shifts/shifts.module';
+
+import { ReportsModule } from './modules/reports/reports.module';
+
 import { UsersModule } from './modules/users/users.module';
 
 import { DemoDataService } from './seed/demo-data.service';
 
 import { DemoInventorySeedService } from './seed/demo-inventory.seed.service';
 import { DemoTenantsSeedService } from './seed/demo-tenants.seed.service';
+import { DemoStoreReportsSeedService } from './seed/demo-store-reports.seed.service';
+import { DemoChainBranchSetupService } from './seed/demo-chain-branch-setup.seed.service';
+import { DemoChainOperationsSeedService } from './seed/demo-chain-operations.seed.service';
+import { DemoChainReportsSeedService } from './seed/demo-chain-reports.seed.service';
 
 import { SeedService } from './seed/seed.service';
 
@@ -52,6 +60,7 @@ import { MenuItem, MenuItemSchema } from './modules/menu/schemas/menu-item.schem
 
 import { User, UserSchema } from './modules/users/schemas/user.schema';
 
+import { BranchesModule } from './modules/branches/branches.module';
 import { Branch, BranchSchema } from './modules/branches/schemas/branch.schema';
 import { Tenant, TenantSchema } from './modules/tenants/schemas/tenant.schema';
 
@@ -86,6 +95,11 @@ import {
   StockTransferRequest,
   StockTransferRequestSchema,
 } from './modules/inventory/schemas/stock-transfer-request.schema';
+import {
+  ShiftSession,
+  ShiftSessionSchema,
+} from './modules/shifts/schemas/shift-session.schema';
+import { StockLot, StockLotSchema } from './modules/inventory/schemas/stock-lot.schema';
 
 
 
@@ -128,6 +142,8 @@ import {
       { name: StockMovement.name, schema: StockMovementSchema },
       { name: SupplierReceipt.name, schema: SupplierReceiptSchema },
       { name: StockTransferRequest.name, schema: StockTransferRequestSchema },
+      { name: ShiftSession.name, schema: ShiftSessionSchema },
+      { name: StockLot.name, schema: StockLotSchema },
     ]),
 
     TenantsModule,
@@ -152,6 +168,12 @@ import {
 
     InventoryModule,
 
+    ShiftsModule,
+
+    ReportsModule,
+
+    BranchesModule,
+
   ],
 
   providers: [
@@ -163,6 +185,14 @@ import {
     DemoTenantsSeedService,
 
     DemoInventorySeedService,
+
+    DemoStoreReportsSeedService,
+
+    DemoChainBranchSetupService,
+
+    DemoChainReportsSeedService,
+
+    DemoChainOperationsSeedService,
 
     TenantMigrationService,
 

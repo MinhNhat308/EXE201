@@ -28,9 +28,9 @@ export enum StockRequestStatus {
 
 export const STOCK_REQUEST_TYPE_LABELS: Record<StockRequestType, string> = {
 
-  [StockRequestType.DISPATCH_FROM_CENTRAL]: 'Cấp phát trong ngày',
+  [StockRequestType.DISPATCH_FROM_CENTRAL]: 'Cấp phát / bàn giao ca',
 
-  [StockRequestType.RETURN_TO_CENTRAL]: 'Hoàn trả cuối ngày',
+  [StockRequestType.RETURN_TO_CENTRAL]: 'Thu hồi về kho tổng (tuỳ chọn)',
 
   [StockRequestType.REPLENISH_FROM_CENTRAL]: 'Bổ sung tồn kho lẻ',
 
@@ -91,6 +91,16 @@ export interface OperationsDashboard {
   overdueOpenIssues: number;
 
   needsEndOfDayReturn: number;
+
+  todayReceiptCount: number;
+
+  todayReceiptValue: number;
+
+  monthReceiptCount: number;
+
+  monthReceiptValue: number;
+
+  expiringSoonCount: number;
 
 }
 

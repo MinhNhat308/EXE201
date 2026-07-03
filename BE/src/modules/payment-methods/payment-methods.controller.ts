@@ -24,8 +24,26 @@ export class PaymentMethodsController {
 
   @Get()
   @Roles(Role.ADMIN, Role.STAFF)
-  findAll(@Query('activeOnly') activeOnly?: string) {
-    return this.paymentMethodsService.findAll(activeOnly === 'true');
+  findAll(
+    @Query('activeOnly') activeOnly?: string,
+    @Query('includeQr') includeQr?: string,
+  ) {
+    return this.paymentMethodsService.findAll(
+      activeOnly === 'true',
+      includeQr === 'true',
+    );
+  }
+
+  @Get('by-code/:code')
+  @Roles(Role.ADMIN, Role.STAFF)
+  findByCode(@Param('code') code: string) {
+    return this.paymentMethodsService.findByCodeForDisplay(code);
+  }
+
+  @Get(':id')
+  @Roles(Role.ADMIN)
+  findOne(@Param('id') id: string) {
+    return this.paymentMethodsService.findOne(id);
   }
 
   @Post()

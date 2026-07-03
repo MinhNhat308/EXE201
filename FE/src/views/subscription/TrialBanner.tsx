@@ -9,7 +9,6 @@ import {
   getSubscriptionStatus,
   getTrialDaysLeft,
 } from '@/lib/auth-storage';
-import { syncSessionFromServer } from '@/lib/sync-session';
 import { SubscriptionInfo, SubscriptionStatus, TenantInfo } from '@/models/tenant.model';
 import { UpgradeModal } from './UpgradeModal';
 
@@ -19,23 +18,21 @@ export function TrialBanner() {
   const [showUpgrade, setShowUpgrade] = useState(false);
   const [tenant, setTenant] = useState<TenantInfo | null>(null);
 
-  const applyLocal = () => {
-    const days = getTrialDaysLeft();
-    const st = getSubscriptionStatus();
-    setTrialDays(days);
-    setStatus(st);
-    setTenant(getStoredTenant<TenantInfo>());
-    const sub = getStoredSubscription<SubscriptionInfo>();
-    if (sub?.status === SubscriptionStatus.TRIAL && days > 0 && days <= 3) {
-      setShowUpgrade(true);
-    }
-  };
-
   useEffect(() => {
+    const applyLocal = () => {
+      const days = getTrialDaysLeft();
+      const st = getSubscriptionStatus();
+      setTrialDays(days);
+      setStatus(st);
+      setTenant(getStoredTenant<TenantInfo>());
+      const sub = getStoredSubscription<SubscriptionInfo>();
+      if (sub?.status === SubscriptionStatus.TRIAL && days > 0 && days <= 3) {
+        setShowUpgrade(true);
+      }
+    };
     applyLocal();
-    syncSessionFromServer().then((ok) => {
-      if (ok) applyLocal();
-    });
+    const id = window.setInterval(applyLocal, 30_000);
+    return () => window.clearInterval(id);
   }, []);
 
   if (status === SubscriptionStatus.EXPIRED || status === SubscriptionStatus.SUSPENDED) {

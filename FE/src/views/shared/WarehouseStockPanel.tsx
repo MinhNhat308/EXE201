@@ -1,9 +1,11 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { usePolling } from '@/lib/use-polling';
 import { InventoryController } from '@/controllers/inventory.controller';
-import { StockItem, WarehouseLocation } from '@/models/inventory.model';
+import { usePolling } from '@/lib/use-polling';
+import { useActiveBranch } from '@/lib/use-active-branch';
+import { useBranchWarehouses } from '@/lib/use-branch-warehouses';
+import { StockItem } from '@/models/inventory.model';
 import {
   EmptyState,
   InventoryPageHeader,
@@ -22,7 +24,8 @@ export function WarehouseStockPanel({
   title?: string;
   theme?: InventoryTheme;
 }) {
-  const [warehouses, setWarehouses] = useState<WarehouseLocation[]>([]);
+  const { branchId, version } = useActiveBranch();
+  const { warehouses, centralId } = useBranchWarehouses();
   const [warehouseId, setWarehouseId] = useState('');
   const [items, setItems] = useState<StockItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -30,12 +33,8 @@ export function WarehouseStockPanel({
   const [lastSync, setLastSync] = useState<Date | null>(null);
 
   useEffect(() => {
-    InventoryController.getWarehouses().then((whs) => {
-      setWarehouses(whs);
-      const central = whs.find((w) => w.isCentralWarehouse) ?? whs[0];
-      if (central) setWarehouseId(central.id);
-    });
-  }, []);
+    setWarehouseId(centralId ?? warehouses[0]?.id ?? '');
+  }, [centralId, warehouses, branchId, version]);
 
   const load = useCallback(async () => {
     if (!warehouseId) return;
@@ -49,7 +48,7 @@ export function WarehouseStockPanel({
     } finally {
       setLoading(false);
     }
-  }, [warehouseId]);
+  }, [warehouseId, version]);
 
   usePolling(load, POLL_MS, !!warehouseId);
 
@@ -65,15 +64,11 @@ export function WarehouseStockPanel({
         subtitle={
           selected
             ? `${selected.name}${selected.isKitchenSource ? ' · Bếp trừ kho khi đơn READY' : selected.isCentralWarehouse ? ' · Nguồn nhập NCC' : ' · Nhận hàng qua phiếu đã duyệt'}`
-            : undefined
+            : lastSync
+              ? `Cập nhật ${lastSync.toLocaleTimeString('vi-VN')}`
+              : undefined
         }
-      >
-        {lastSync && (
-          <p className="rounded-lg bg-white/15 px-3 py-1.5 text-xs text-white/90">
-            Cập nhật {lastSync.toLocaleTimeString('vi-VN')}
-          </p>
-        )}
-      </InventoryPageHeader>
+      />
 
       {warehouses.length > 0 && (
         <WarehouseSelector
@@ -87,26 +82,25 @@ export function WarehouseStockPanel({
         />
       )}
 
-      {lowCount > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          <strong>{lowCount}</strong> mặt hàng dưới mức tối thiểu tại <strong>{selected?.code}</strong>
-        </div>
-      )}
-
-      {error && (
-        <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">{error}</p>
-      )}
+      {error && <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-600">{error}</p>}
 
       {loading && items.length === 0 ? (
         <LoadingGrid />
       ) : items.length === 0 ? (
         <EmptyState
-          icon="📭"
-          title="Kho trống"
-          description="Nhập NCC vào KHO_TONG hoặc duyệt phiếu chuyển kho"
+          icon="📦"
+          title="Chưa có tồn kho"
+          description="Chọn kho khác hoặc nhập NCC / cấp phát để có dữ liệu."
         />
       ) : (
-        <StockCardGrid items={items} />
+        <>
+          {lowCount > 0 && (
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-900">
+              ⚠️ <strong>{lowCount}</strong> mặt hàng dưới mức tối thiểu
+            </p>
+          )}
+          <StockCardGrid items={items} />
+        </>
       )}
     </div>
   );

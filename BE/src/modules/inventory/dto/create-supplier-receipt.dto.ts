@@ -23,6 +23,10 @@ export class SupplierReceiptLineDto {
   @IsNumber()
   @Min(0)
   unitPrice?: number;
+
+  @IsOptional()
+  @IsDateString()
+  expiryDate?: string;
 }
 
 export class CreateSupplierReceiptDto {

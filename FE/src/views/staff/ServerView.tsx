@@ -7,8 +7,10 @@ import { OrderController } from '@/controllers/order.controller';
 import { getStoredUser } from '@/lib/auth-storage';
 import { canAccessRole, isStoreOwner } from '@/lib/role-access';
 import { formatToppingsLabel } from '@/lib/cart';
+import { formatSugarIceLine } from '@/lib/sugar-ice';
 import { formatCurrency } from '@/lib/format';
-import { resolveStaffSession } from '@/lib/staff-session-storage';
+import { resolveStaffSession, endStaffSessionRemote } from '@/lib/staff-session-storage';
+import { STORE_CHECK_IN_PATH } from '@/lib/workspace-routes';
 import {
   Order,
   OrderStatus,
@@ -61,7 +63,7 @@ export function ServerView() {
     }
     if (!session || session.workRole !== WorkRole.SERVER) {
       if (!isStoreOwner(stored.role)) {
-        router.replace('/dashboard/staff/setup');
+        router.replace(STORE_CHECK_IN_PATH);
       }
       return;
     }
@@ -118,7 +120,10 @@ export function ServerView() {
             </button>
             <button
               type="button"
-              onClick={() => router.push('/dashboard/staff/setup')}
+              onClick={() => {
+                void endStaffSessionRemote();
+                router.push(STORE_CHECK_IN_PATH);
+              }}
               className="rounded-lg bg-white/20 px-3 py-1 text-sm hover:bg-white/30"
             >
               Đổi ca
@@ -170,6 +175,14 @@ export function ServerView() {
                           <span className="block text-xs text-violet-600">
                             + {formatToppingsLabel(item.toppings)}
                           </span>
+                        )}
+                        {(item.sugarPercent != null || item.icePercent != null) && (
+                          <span className="block text-xs text-sky-600">
+                            🧊 {formatSugarIceLine(item.sugarPercent, item.icePercent)}
+                          </span>
+                        )}
+                        {item.note && (
+                          <span className="block text-xs text-amber-700">📝 {item.note}</span>
                         )}
                       </span>
                       <span>{formatCurrency(item.price * item.quantity)}</span>

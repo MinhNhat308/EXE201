@@ -2,28 +2,28 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { InventoryController } from '@/controllers/inventory.controller';
+import { useActiveBranch } from '@/lib/use-active-branch';
+import { useBranchWarehouses } from '@/lib/use-branch-warehouses';
 import { StockItem } from '@/models/inventory.model';
 import { WarehouseLocation } from '@/models/inventory.model';
 import { AdminLayout } from './AdminLayout';
 
 export function AdminMinStockView() {
-  const [warehouses, setWarehouses] = useState<WarehouseLocation[]>([]);
+  const { branchId, version } = useActiveBranch();
+  const { warehouses, centralId } = useBranchWarehouses();
   const [warehouseId, setWarehouseId] = useState('');
   const [items, setItems] = useState<StockItem[]>([]);
   const [saving, setSaving] = useState<string | null>(null);
 
   useEffect(() => {
-    InventoryController.getWarehouses(true).then((whs) => {
-      setWarehouses(whs);
-      if (whs[0]) setWarehouseId(whs[0].id);
-    });
-  }, []);
+    setWarehouseId(centralId ?? warehouses[0]?.id ?? '');
+  }, [centralId, warehouses, branchId, version]);
 
   const load = useCallback(async () => {
     if (!warehouseId) return;
     const data = await InventoryController.getStock(warehouseId);
     setItems(data);
-  }, [warehouseId]);
+  }, [warehouseId, version]);
 
   useEffect(() => {
     load();

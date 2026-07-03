@@ -1,9 +1,10 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 
 import { JwtService } from '@nestjs/jwt';
 
 import * as bcrypt from 'bcrypt';
 
+import { Role } from '../../common/enums/role.enum';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
 
 import { TenantsService } from '../tenants/tenants.service';
@@ -11,6 +12,7 @@ import { TenantsService } from '../tenants/tenants.service';
 import { UsersService } from '../users/users.service';
 
 import { LoginDto } from './dto/login.dto';
+import { UpdateTenantDto } from './dto/update-tenant.dto';
 
 import { UserDocument } from '../users/schemas/user.schema';
 
@@ -73,6 +75,13 @@ export class AuthService {
 
 
   async login(loginDto: LoginDto): Promise<AuthResponse> {
+
+    const id = loginDto.identifier.trim().toLowerCase();
+    if (!id.includes('@') && !loginDto.storeSlug?.trim()) {
+      throw new UnauthorizedException(
+        'Nhân viên cần nhập thêm mã cửa hàng',
+      );
+    }
 
     const user = await this.usersService.findByLogin(
 
@@ -227,6 +236,30 @@ export class AuthService {
 
   }
 
+  async completeOnboarding(user: UserDocument) {
+    if (user.role !== Role.ADMIN) {
+      throw new ForbiddenException('Chỉ chủ cửa hàng mới hoàn tất thiết lập');
+    }
+    if (!user.tenantId) {
+      throw new UnauthorizedException('Không xác định cửa hàng');
+    }
+    const tenant = await this.tenantsService.markOnboardingComplete(
+      user.tenantId.toString(),
+    );
+    return { tenant: tenant.toJSON() as Record<string, unknown> };
+  }
+
+  async updateTenant(user: UserDocument, dto: UpdateTenantDto) {
+    if (user.role !== Role.ADMIN) {
+      throw new ForbiddenException('Chỉ chủ cửa hàng mới cập nhật cửa hàng');
+    }
+    if (!user.tenantId) {
+      throw new UnauthorizedException('Không xác định cửa hàng');
+    }
+    const tenant = await this.tenantsService.updateProfile(
+      user.tenantId.toString(),
+      dto,
+    );
+    return { tenant: tenant.toJSON() as Record<string, unknown> };
+  }
 }
-
-

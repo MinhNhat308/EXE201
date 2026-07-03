@@ -1,10 +1,12 @@
 import {
   IsArray,
   IsEnum,
+  IsInt,
   IsNotEmpty,
   IsNumber,
   IsOptional,
   IsString,
+  Max,
   Min,
   ValidateNested,
 } from 'class-validator';
@@ -50,6 +52,18 @@ export class OrderItemDto {
   @IsOptional()
   @IsString()
   note?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  sugarPercent?: number;
+
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Max(100)
+  icePercent?: number;
 }
 
 export class CreateOrderDto {
@@ -77,6 +91,10 @@ export class CreateOrderDto {
   @IsString()
   @IsNotEmpty()
   paymentMethod: string;
+
+  @IsOptional()
+  @IsString()
+  branchId?: string;
 
   @IsEnum(WorkShift)
   workShift: WorkShift;

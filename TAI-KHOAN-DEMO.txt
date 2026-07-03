@@ -1,0 +1,68 @@
+================================================================================
+BOBAPOS — TÀI KHOẢN DEMO (seed tự động khi chạy BE)
+================================================================================
+Mật khẩu chung (chủ quán + nhân viên): Demo@123
+
+Cách đăng nhập:
+  • Chủ quán (ADMIN): email + mật khẩu (không cần mã cửa hàng)
+  • Nhân viên: username + mã cửa hàng (store slug) + mật khẩu
+
+--------------------------------------------------------------------------------
+1. SOLO — 1 người vận hành (gói SOLO)
+--------------------------------------------------------------------------------
+Mã cửa hàng (slug): demo-solo
+
+  Chủ quán (ADMIN)
+    Email:    demo-solo@bobapos.test
+    Mật khẩu: Demo@123
+
+--------------------------------------------------------------------------------
+2. STORE — 1 cửa hàng có nhân viên (gói STANDARD)
+--------------------------------------------------------------------------------
+Mã cửa hàng (slug): demo-store
+
+  Chủ quán (ADMIN)
+    Email:    demo-store@bobapos.test
+    Mật khẩu: Demo@123
+
+  Nhân viên (username + slug demo-store)
+    cashier    — Thu ngân (STAFF) · check-in ca → POS / Phục vụ
+    kitchen    — Bếp (KITCHEN) · check-in → màn KDS
+    manager    — Quản lý ca (STORE_MANAGER)
+    accounting — Kế toán (ACCOUNTING) · NCC, duyệt phiếu
+    warehouse  — Thủ kho (WAREHOUSE)
+
+  (Email NV tương ứng trên DB: store-cashier@bobapos.test, store-kitchen@..., v.v.)
+
+--------------------------------------------------------------------------------
+3. CHAIN — chuỗi 4 chi nhánh (gói PREMIUM)
+--------------------------------------------------------------------------------
+Mã cửa hàng (slug): demo-chain
+
+  Chủ chuỗi (ADMIN)
+    Email:    demo-chain@bobapos.test
+    Mật khẩu: Demo@123
+    Ghi chú:   Sidebar có dropdown đổi chi nhánh (MAIN, CN-Q1, CN-Q7, CN-TD)
+
+  Nhân viên (username + slug demo-chain)
+    cashier1   — Thu ngân CN Quận 1 (STAFF)
+    cashier2   — Thu ngân CN Quận 7 (STAFF)
+    kitchen    — Bếp trưởng (KITCHEN) · chi nhánh MAIN
+    manager    — Quản lý ca (STORE_MANAGER) · MAIN
+    accounting — Kế toán (ACCOUNTING) · MAIN
+    warehouse  — Thủ kho (WAREHOUSE) · MAIN
+
+  Chi nhánh seed:
+    MAIN   — Trụ sở (mặc định)
+    CN-Q1  — Quận 1
+    CN-Q7  — Quận 7
+    CN-TD  — Thủ Đức
+
+--------------------------------------------------------------------------------
+Ghi chú kỹ thuật
+--------------------------------------------------------------------------------
+  • Seed chạy khi BE start (trừ khi SEED_DEMO_TENANTS=false trong .env)
+  • Đổi credential qua biến SEED_DEMO_* trong BE/.env.example
+  • File này chỉ để tham khảo local — không commit lên production công khai
+
+Cập nhật: 2026-06-28

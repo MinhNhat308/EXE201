@@ -14,7 +14,7 @@ export enum OrderStatus {
 export const ORDER_STATUS_LABELS: Record<string, string> = {
   [OrderStatus.PENDING]: 'Chưa thực hiện',
   [OrderStatus.PREPARING]: 'Đang thực hiện',
-  [OrderStatus.READY]: 'Đã hoàn thành',
+  [OrderStatus.READY]: 'Sẵn sàng bưng',
   [OrderStatus.COMPLETED]: 'Hoàn tất',
   [OrderStatus.CANCELLED]: 'Đã hủy',
   [OrderStatus.CONFIRMED]: 'Chưa thực hiện',
@@ -49,6 +49,8 @@ export interface OrderLineItem {
   price: number;
   quantity: number;
   note?: string;
+  sugarPercent?: number;
+  icePercent?: number;
 }
 
 export interface Order {
@@ -83,6 +85,7 @@ export interface CreateOrderPayload {
   workShift: WorkShift;
   subtotal: number;
   total: number;
+  branchId?: string;
 }
 
 export interface UpdateOrderPayload {

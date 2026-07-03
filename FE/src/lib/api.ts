@@ -1,7 +1,8 @@
 import { getToken } from './auth-storage';
-import { getCached, invalidateCache, setCached } from './api-cache';
+import { dedupeRequest, getCached, invalidateCache, setCached } from './api-cache';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
+const DEFAULT_FETCH_TIMEOUT_MS = 20_000;
 
 export class ApiError extends Error {
   constructor(
@@ -21,9 +22,40 @@ interface RequestOptions extends RequestInit {
   skipCache?: boolean;
 }
 
-export async function apiRequest<T>(
+function invalidateForMutation(path: string): void {
+  if (path.startsWith('/orders')) {
+    invalidateCache('GET:/orders');
+    return;
+  }
+  if (path.startsWith('/shifts')) {
+    invalidateCache('GET:/shifts');
+    return;
+  }
+  if (path.startsWith('/menu')) {
+    invalidateCache('GET:/menu');
+    return;
+  }
+  if (path.startsWith('/toppings')) {
+    invalidateCache('GET:/toppings');
+    return;
+  }
+  if (path.startsWith('/payment-methods')) {
+    invalidateCache('GET:/payment-methods');
+    return;
+  }
+  if (path.startsWith('/inventory')) {
+    invalidateCache('GET:/inventory');
+    return;
+  }
+  if (path.startsWith('/auth/tenant') || path.startsWith('/auth/onboarding')) {
+    invalidateCache('GET:/auth/session');
+    return;
+  }
+}
+
+async function executeRequest<T>(
   path: string,
-  options: RequestOptions = {},
+  options: RequestOptions,
 ): Promise<T> {
   const { auth = false, headers, cacheTtlMs, skipCache, ...rest } = options;
   const method = (rest.method ?? 'GET').toUpperCase();
@@ -46,17 +78,34 @@ export async function apiRequest<T>(
     }
   }
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), DEFAULT_FETCH_TIMEOUT_MS);
+  const { signal: userSignal, ...fetchRest } = rest;
+
+  if (userSignal) {
+    userSignal.addEventListener('abort', () => controller.abort(), { once: true });
+  }
+
   let response: Response;
   try {
     response = await fetch(`${API_URL}${path}`, {
-      ...rest,
+      ...fetchRest,
       headers: requestHeaders,
+      signal: controller.signal,
     });
-  } catch {
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new ApiError(
+        'Máy chủ không phản hồi (quá 20 giây). Hãy kiểm tra Backend: cd BE → npm run start:dev (port 3001).',
+        0,
+      );
+    }
     throw new ApiError(
       'Không kết nối được máy chủ API. Hãy mở terminal chạy Backend: cd BE → npm run start:dev (port 3001).',
       0,
     );
+  } finally {
+    clearTimeout(timeoutId);
   }
 
   const data = await response.json().catch(() => ({}));
@@ -74,10 +123,23 @@ export async function apiRequest<T>(
   }
 
   if (method !== 'GET') {
-    invalidateCache();
+    invalidateForMutation(path);
   }
 
   return data as T;
+}
+
+export async function apiRequest<T>(
+  path: string,
+  options: RequestOptions = {},
+): Promise<T> {
+  const method = (options.method ?? 'GET').toUpperCase();
+  const cacheKey = `${method}:${path}`;
+
+  if (method === 'GET') {
+    return dedupeRequest(cacheKey, () => executeRequest<T>(path, options));
+  }
+  return executeRequest<T>(path, options);
 }
 
 export { invalidateCache };
