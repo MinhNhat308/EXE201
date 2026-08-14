@@ -35,11 +35,17 @@ export class BillingService {
     };
   }
 
-  /** Thông tin CK gói SaaS — cấu hình qua SAAS_BANK_* trong .env */
+  /** Thông tin CK gói SaaS — ưu tiên VIETQR_* (cùng nguồn với QR động) */
   getBankTransferInfo() {
-    const bank = process.env.SAAS_BANK_NAME?.trim() || 'Techcombank';
-    const account = process.env.SAAS_BANK_ACCOUNT?.trim() || '9528677537';
-    const holder = process.env.SAAS_BANK_HOLDER?.trim() || 'NGUYEN HOANG MINH NHAT';
+    const vietQrAccount = process.env.VIETQR_ACCOUNT_NO?.trim();
+    const vietQrBank = process.env.VIETQR_BANK_NAME?.trim();
+    const vietQrHolder = process.env.VIETQR_ACCOUNT_NAME?.trim();
+
+    const bank = vietQrBank || process.env.SAAS_BANK_NAME?.trim() || 'Techcombank';
+    const account =
+      vietQrAccount || process.env.SAAS_BANK_ACCOUNT?.trim() || '9528677537';
+    const holder =
+      vietQrHolder || process.env.SAAS_BANK_HOLDER?.trim() || 'NGUYEN HOANG MINH NHAT';
     const qrPath = process.env.SAAS_BANK_QR_URL?.trim() || '/billing/qr-bank.jpg';
     const note = process.env.SAAS_BANK_NOTE?.trim() || '';
     return {

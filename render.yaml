@@ -26,13 +26,13 @@ services:
       - key: VIETQR_BANK_NAME
         value: MSB
       - key: VIETQR_ACCOUNT_NO
-        value: "3230082001"
+        value: "96886693049881"
       - key: VIETQR_ACCOUNT_NAME
         value: NGUYEN HOANG MINH NHAT
       - key: SAAS_BANK_NAME
         value: MSB
       - key: SAAS_BANK_ACCOUNT
-        value: "3230082001"
+        value: "96886693049881"
       - key: SAAS_BANK_HOLDER
         value: NGUYEN HOANG MINH NHAT
       - key: SAAS_BANK_QR_URL
