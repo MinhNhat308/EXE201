@@ -1,4 +1,4 @@
-import { getStoredPlan, getStoredSubscription } from '@/lib/auth-storage';
+import { getStoredPlan, getStoredSubscription, getStoredTenant } from '@/lib/auth-storage';
 import { getStaffSession } from '@/lib/staff-session-storage';
 import { WorkRole } from '@/models/staff.model';
 import { SubscriptionPlan, TenantInfo } from '@/models/tenant.model';
