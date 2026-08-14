@@ -1,7 +1,17 @@
 import { getToken } from './auth-storage';
 import { dedupeRequest, getCached, invalidateCache, setCached } from './api-cache';
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:3001/api';
+function resolveApiUrl() {
+  if (process.env.NEXT_PUBLIC_API_URL?.trim()) {
+    return process.env.NEXT_PUBLIC_API_URL.trim().replace(/\/$/, '');
+  }
+  if (process.env.NODE_ENV === 'production' || process.env.VERCEL) {
+    return '/api';
+  }
+  return 'http://localhost:3001/api';
+}
+
+const API_URL = resolveApiUrl();
 const DEFAULT_FETCH_TIMEOUT_MS = 20_000;
 
 export class ApiError extends Error {

@@ -25,7 +25,7 @@ import {
 import { formatCurrency } from '@/lib/format';
 import { resolveStaffSession, endStaffSessionRemote } from '@/lib/staff-session-storage';
 import { CartItem, MenuItem, Topping } from '@/models/menu.model';
-import { Order } from '@/models/order.model';
+import { Order, PaymentStatus } from '@/models/order.model';
 import { PaymentOption } from '@/views/staff/CheckoutModal';
 import {
   WORK_ROLE_LABELS,
@@ -42,6 +42,7 @@ import { CashierMenuStep } from '@/views/staff/CashierMenuStep';
 import { ToppingModal } from '@/views/staff/ToppingModal';
 import { SugarIceModal } from '@/views/staff/SugarIceModal';
 import { CheckoutModal } from '@/views/staff/CheckoutModal';
+import { BankPaymentPanel } from '@/views/payments/BankPaymentPanel';
 import { posSugarIceEnabled, resolveIceLevels, resolveSugarLevels } from '@/lib/sugar-ice';
 
 type CashierStep = 'menu' | 'invoice' | 'confirm';
@@ -177,11 +178,12 @@ export function CashierView({ solo = false }: { solo?: boolean }) {
         }
       : {};
 
-  const confirmedBankQr =
-    confirmedOrder?.paymentMethod === 'BANK_TRANSFER'
+  const orderBankQr = (order: Order) =>
+    order.paymentMethod === 'BANK_TRANSFER'
       ? {
-          paymentQrImageUrl: bankTransferDetails.qrImageUrl,
-          paymentBankInfo: bankTransferDetails.bankAccountInfo,
+          paymentQrImageUrl: order.paymentQrUrl,
+          paymentBankInfo: order.paymentBankInfo,
+          paymentCode: order.paymentCode,
         }
       : {};
 
@@ -453,10 +455,22 @@ export function CashierView({ solo = false }: { solo?: boolean }) {
 
         {step === 'confirm' && confirmedOrder && (
           <div className="mx-auto max-w-md space-y-4 text-center">
-            <div className="rounded-2xl bg-emerald-50 p-6 ring-1 ring-emerald-100">
-              <p className="text-4xl">✅</p>
-              <h2 className="mt-2 text-xl font-bold text-emerald-800">
-                {soloMode ? 'Đơn hoàn thành!' : 'Hoàn tất!'}
+            <div
+              className={`rounded-2xl p-6 ring-1 ${
+                confirmedOrder.paymentStatus === PaymentStatus.PENDING
+                  ? 'bg-sky-50 ring-sky-100'
+                  : 'bg-emerald-50 ring-emerald-100'
+              }`}
+            >
+              <p className="text-4xl">
+                {confirmedOrder.paymentStatus === PaymentStatus.PENDING ? '⏳' : '✅'}
+              </p>
+              <h2 className="mt-2 text-xl font-bold text-stone-800">
+                {confirmedOrder.paymentStatus === PaymentStatus.PENDING
+                  ? 'Chờ khách chuyển khoản'
+                  : soloMode
+                    ? 'Đơn hoàn thành!'
+                    : 'Hoàn tất!'}
               </h2>
               <p className="mt-1 font-mono text-sm text-stone-600">
                 {confirmedOrder.invoiceNumber}
@@ -465,6 +479,14 @@ export function CashierView({ solo = false }: { solo?: boolean }) {
                 {formatCurrency(confirmedOrder.total)}
               </p>
             </div>
+
+            {confirmedOrder.paymentMethod === 'BANK_TRANSFER' && (
+              <BankPaymentPanel
+                order={confirmedOrder}
+                onPaid={(fresh) => setConfirmedOrder(fresh)}
+              />
+            )}
+
             <InvoicePreview
               printable
               storeName={tenant?.storeName}
@@ -476,7 +498,7 @@ export function CashierView({ solo = false }: { solo?: boolean }) {
               tableNumber={confirmedOrder.tableNumber}
               note={confirmedOrder.note}
               paymentMethod={confirmedOrder.paymentMethod}
-              {...confirmedBankQr}
+              {...orderBankQr(confirmedOrder)}
               workShift={confirmedOrder.workShift}
               staffName={confirmedOrder.staffName}
               subtotal={confirmedOrder.subtotal}
@@ -494,11 +516,17 @@ export function CashierView({ solo = false }: { solo?: boolean }) {
               <button
                 type="button"
                 onClick={handleNewOrder}
-                className={`flex-1 rounded-xl py-3 font-bold text-white ${BRAND.primary}`}
+                disabled={confirmedOrder.paymentStatus === PaymentStatus.PENDING}
+                className="flex-1 rounded-xl bg-[#2F80ED] py-3 font-bold text-white disabled:opacity-50"
               >
                 + Đơn mới
               </button>
             </div>
+            {confirmedOrder.paymentStatus === PaymentStatus.PENDING && (
+              <p className="text-xs text-stone-500">
+                Tạo đơn mới sau khi khách đã chuyển khoản (tự xác nhận hoặc bấm xác nhận thủ công).
+              </p>
+            )}
           </div>
         )}
       </main>

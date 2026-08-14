@@ -19,6 +19,7 @@ interface InvoicePreviewProps {
   paymentMethodLabel?: string;
   paymentQrImageUrl?: string;
   paymentBankInfo?: string;
+  paymentCode?: string;
   workShift?: WorkShift;
   staffName?: string;
   subtotal: number;
@@ -40,6 +41,7 @@ export function InvoicePreview({
   paymentMethodLabel,
   paymentQrImageUrl,
   paymentBankInfo,
+  paymentCode,
   workShift,
   staffName,
   subtotal,
@@ -78,15 +80,28 @@ export function InvoicePreview({
         {paymentMethod && (
           <p>Thanh toán: {paymentMethodLabel ?? paymentMethod}</p>
         )}
-        {paymentMethod === 'BANK_TRANSFER' && paymentQrImageUrl && (
+        {paymentMethod === 'BANK_TRANSFER' && (
           <div className="mt-3 text-center print:block">
-            <p className="text-xs text-stone-500">Quét QR chuyển khoản</p>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={paymentQrImageUrl}
-              alt="QR"
-              className="mx-auto mt-1 max-h-36 object-contain print:max-h-40"
-            />
+            {paymentQrImageUrl ? (
+              <>
+                <p className="text-xs text-stone-500">Quét QR chuyển khoản (VietQR)</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={paymentQrImageUrl}
+                  alt="QR"
+                  className="mx-auto mt-1 max-h-36 object-contain print:max-h-40"
+                />
+              </>
+            ) : (
+              <p className="text-xs text-amber-700">
+                Mã QR sẽ hiện sau khi lưu đơn
+              </p>
+            )}
+            {paymentCode && (
+              <p className="mt-1 font-mono text-xs text-stone-700">
+                Nội dung CK: {paymentCode}
+              </p>
+            )}
             {paymentBankInfo && (
               <p className="mt-1 text-xs text-stone-600">{paymentBankInfo}</p>
             )}

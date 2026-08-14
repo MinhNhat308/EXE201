@@ -136,8 +136,8 @@ export function CheckoutModal({
               const bank = bankTransferDetails;
               if (!bank?.qrImageUrl && !bank?.bankAccountInfo) {
                 return (
-                  <p className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs text-amber-800">
-                    Chưa có QR — thêm trong Cài đặt → Quán &amp; TT.
+                  <p className="mt-3 rounded-xl bg-sky-50 px-3 py-2 text-xs text-sky-800">
+                    Mã QR VietQR động (đúng số tiền) sẽ hiện ở bước hóa đơn sau khi lưu đơn.
                   </p>
                 );
               }

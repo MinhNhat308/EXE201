@@ -1,6 +1,7 @@
 import { Prop, Schema, SchemaFactory } from '@nestjs/mongoose';
 import { Document, Types } from 'mongoose';
 import { OrderStatus } from '../../../common/enums/order-status.enum';
+import { PaymentStatus } from '../../../common/enums/payment-status.enum';
 import { WorkShift } from '../../../common/enums/work-shift.enum';
 import { applyTenantPlugin } from '../../../common/tenant/tenant-plugin';
 import { ToppingOption, ToppingOptionSchema } from '../../menu/schemas/topping.schema';
@@ -94,6 +95,22 @@ export class Order {
   @Prop({ required: true, enum: OrderStatus, default: OrderStatus.PENDING })
   status: OrderStatus;
 
+  /** CK/QR: PENDING → PAID qua SePay webhook */
+  @Prop({ enum: PaymentStatus, default: PaymentStatus.NOT_REQUIRED })
+  paymentStatus?: PaymentStatus;
+
+  @Prop({ trim: true, uppercase: true })
+  paymentCode?: string;
+
+  @Prop()
+  paymentQrUrl?: string;
+
+  @Prop({ trim: true })
+  paymentBankInfo?: string;
+
+  @Prop()
+  paidAt?: Date;
+
   @Prop()
   cancelReason?: string;
 
@@ -143,6 +160,11 @@ OrderSchema.set('toJSON', {
     subtotal: ret.subtotal,
     total: ret.total,
     status: ret.status,
+    paymentStatus: ret.paymentStatus,
+    paymentCode: ret.paymentCode,
+    paymentQrUrl: ret.paymentQrUrl,
+    paymentBankInfo: ret.paymentBankInfo,
+    paidAt: ret.paidAt,
     cancelReason: ret.cancelReason,
     cancelledAt: ret.cancelledAt,
     inventoryDeducted: ret.inventoryDeducted,

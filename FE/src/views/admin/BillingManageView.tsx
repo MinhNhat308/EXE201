@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { BillingController, BankTransferInfo } from '@/controllers/billing.controller';
+import { usePolling } from '@/lib/use-polling';
 import { SubscriptionController } from '@/controllers/subscription.controller';
 import { BRAND } from '@/lib/brand';
 import { SEGMENTS, segmentLabel } from '@/lib/segments';
@@ -21,13 +22,14 @@ const PLAN_PRICE: Record<SubscriptionPlan, number> = {
   [SubscriptionPlan.PREMIUM]: 599_000,
 };
 
+const SUBSCRIPTION_PERIOD_DAYS = 30;
+
 export function BillingManageView() {
   const [invoices, setInvoices] = useState<BillingInvoice[]>([]);
   const [tenant, setTenant] = useState<TenantInfo | null>(null);
   const [status, setStatus] = useState<SubscriptionStatus | null>(null);
   const [trialDaysLeft, setTrialDaysLeft] = useState(0);
   const [checkoutPlan, setCheckoutPlan] = useState<SubscriptionPlan>(SubscriptionPlan.STANDARD);
-  const [months, setMonths] = useState(1);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
@@ -63,14 +65,14 @@ export function BillingManageView() {
     load();
   }, []);
 
-  const estimated = PLAN_PRICE[checkoutPlan] * months;
+  const estimated = PLAN_PRICE[checkoutPlan];
 
   const handleCheckout = async () => {
     setBusy(true);
     setMessage('');
     setLastInvoiceId(null);
     try {
-      const inv = await BillingController.checkout(checkoutPlan, months);
+      const inv = await BillingController.checkout(checkoutPlan);
       setLastInvoiceId(inv.id);
       setMessage(
         `Đã tạo hóa đơn. Chuyển khoản ${inv.amount.toLocaleString('vi-VN')}đ theo thông tin bên dưới.`,
@@ -88,7 +90,7 @@ export function BillingManageView() {
     setMessage('');
     setLastInvoiceId(null);
     try {
-      const res = await BillingController.checkoutMomo(checkoutPlan, months);
+      const res = await BillingController.checkoutMomo(checkoutPlan);
       sessionStorage.setItem('bobapos_pending_invoice', res.invoice.id);
       const redirect = new URL(res.payUrl);
       window.location.href = redirect.toString();
@@ -116,6 +118,23 @@ export function BillingManageView() {
   const pendingInvoice = lastInvoiceId
     ? invoices.find((i) => i.id === lastInvoiceId)
     : invoices.find((i) => i.status === 'PENDING');
+
+  usePolling(
+    async () => {
+      if (!pendingInvoice || pendingInvoice.status !== 'PENDING') return;
+      try {
+        const fresh = await BillingController.getInvoice(pendingInvoice.id);
+        if (fresh.status === 'PAID') {
+          setMessage('SePay đã xác nhận thanh toán — gói được kích hoạt tự động.');
+          await load();
+        }
+      } catch {
+        /* ignore */
+      }
+    },
+    5000,
+    Boolean(pendingInvoice && pendingInvoice.status === 'PENDING'),
+  );
 
   return (
     <AdminLayout>
@@ -172,16 +191,16 @@ export function BillingManageView() {
       {/* Luồng 3 bước */}
       <div className="mt-8 grid gap-4 md:grid-cols-3">
         {[
-          { n: '1', t: 'Chọn gói & thời hạn', d: 'Gói bạn đã chọn khi đăng ký (Solo / Store / Chain).' },
+          { n: '1', t: 'Chọn gói', d: 'Solo 99k · Store 299k · Chain 599k — mỗi gói dùng 30 ngày.' },
           {
             n: '2',
             t: 'Tạo hóa đơn & quét QR',
-            d: 'Quét mã QR ngân hàng hoặc chuyển khoản thủ công theo nội dung hóa đơn.',
+            d: 'Quét mã QR VietQR hoặc chuyển khoản theo nội dung hóa đơn.',
           },
           {
             n: '3',
-            t: 'Xác nhận & dùng tiếp',
-            d: 'Sau khi nhận tiền, bấm xác nhận để kích hoạt gói (demo: tự xác nhận).',
+            t: 'Thanh toán → kích hoạt',
+            d: 'SePay tự xác nhận — gói ACTIVE trong 30 ngày.',
           },
         ].map((s) => (
           <div key={s.n} className="rounded-2xl border bg-white p-4 shadow-sm">
@@ -214,20 +233,12 @@ export function BillingManageView() {
           </div>
           <div>
             <label className="mb-1 block text-xs font-semibold text-stone-500">Thời hạn</label>
-            <select
-              value={months}
-              onChange={(e) => setMonths(Number(e.target.value))}
-              className="rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
-            >
-              {[1, 3, 6, 12].map((m) => (
-                <option key={m} value={m}>
-                  {m} tháng
-                </option>
-              ))}
-            </select>
+            <div className="rounded-xl border border-stone-200 bg-stone-50 px-3 py-2.5 text-sm font-semibold text-stone-700">
+              {SUBSCRIPTION_PERIOD_DAYS} ngày / lần thanh toán
+            </div>
           </div>
           <div className="rounded-xl bg-stone-50 px-4 py-2.5">
-            <p className="text-xs text-stone-500">Tạm tính</p>
+            <p className="text-xs text-stone-500">Tạm tính (30 ngày)</p>
             <p className="text-lg font-bold text-stone-900">
               {estimated.toLocaleString('vi-VN')}đ
             </p>
@@ -271,15 +282,24 @@ export function BillingManageView() {
           </p>
           <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:items-start">
             <div className="shrink-0 rounded-2xl border bg-white p-3 shadow-sm">
-              <p className="mb-2 text-center text-xs font-semibold text-stone-500">Quét mã QR</p>
-              <div className="relative mx-auto h-44 w-44 overflow-hidden rounded-xl bg-stone-100">
-                <Image
-                  src={bankInfo.qrUrl}
-                  alt="QR chuyển khoản"
-                  fill
-                  className="object-contain"
-                  unoptimized
-                />
+              <p className="mb-2 text-center text-xs font-semibold text-stone-500">Quét mã QR VietQR</p>
+              <div className="relative mx-auto flex h-44 w-44 items-center justify-center overflow-hidden rounded-xl bg-stone-100">
+                {pendingInvoice.paymentQrUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={pendingInvoice.paymentQrUrl}
+                    alt="QR thanh toán"
+                    className="h-full w-full object-contain"
+                  />
+                ) : bankInfo ? (
+                  <Image
+                    src={bankInfo.qrUrl}
+                    alt="QR chuyển khoản"
+                    fill
+                    className="object-contain"
+                    unoptimized
+                  />
+                ) : null}
               </div>
             </div>
             <dl className="grid flex-1 gap-2 text-sm sm:grid-cols-2">
@@ -304,7 +324,8 @@ export function BillingManageView() {
             <div className="rounded-xl bg-white p-3 sm:col-span-2">
               <dt className="text-xs text-stone-500">Nội dung chuyển khoản</dt>
               <dd className="font-mono text-sm">
-                {bankInfo.transferPrefix} {pendingInvoice.id.slice(-8).toUpperCase()}
+                {pendingInvoice.paymentCode ??
+                  `${bankInfo.transferPrefix} ${pendingInvoice.id.slice(-8).toUpperCase()}`}
               </dd>
             </div>
             </dl>
@@ -313,8 +334,8 @@ export function BillingManageView() {
             <p className="mt-3 text-xs text-stone-500">{bankInfo.note}</p>
           )}
           <p className="mt-4 text-xs text-stone-500">
-            Sau khi chuyển khoản, bấm <strong>Xác nhận đã thanh toán</strong> để kích hoạt gói.
-            Production: admin SaaS xác nhận khi thấy tiền vào tài khoản.
+            SePay tự xác nhận khi tiền vào (webhook). Hoặc bấm{' '}
+            <strong>Xác nhận đã thanh toán</strong> nếu cần kích hoạt thủ công.
           </p>
           {pendingInvoice.status === 'PENDING' && (
             <button

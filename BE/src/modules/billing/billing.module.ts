@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { MongooseModule } from '@nestjs/mongoose';
+import { PaymentsModule } from '../payments/payments.module';
 import { SubscriptionsModule } from '../subscriptions/subscriptions.module';
 import { BillingInvoice, BillingInvoiceSchema } from './schemas/billing-invoice.schema';
 import { BillingController, MomoWebhookController } from './billing.controller';
@@ -12,6 +13,7 @@ import { MomoPaymentService } from './momo-payment.service';
       { name: BillingInvoice.name, schema: BillingInvoiceSchema },
     ]),
     SubscriptionsModule,
+    PaymentsModule,
   ],
   controllers: [BillingController, MomoWebhookController],
   providers: [BillingService, MomoPaymentService],

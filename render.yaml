@@ -9,27 +9,45 @@ services:
     rootDir: BE
     buildCommand: npm install && npm run build
     startCommand: npm run start:prod
-    healthCheckPath: /api
+    healthCheckPath: /api/health
     envVars:
       - key: NODE_ENV
         value: production
       - key: JWT_EXPIRES_IN
         value: 7d
-      - key: MOMO_ENABLED
-        value: false
+      - key: SEPAY_ENABLED
+        value: true
+      - key: PAYMENT_CODE_PREFIX
+        value: BOBAPOS
+      - key: VIETQR_ENABLED
+        value: true
+      - key: VIETQR_BANK_BIN
+        value: "970426"
+      - key: VIETQR_BANK_NAME
+        value: MSB
+      - key: VIETQR_ACCOUNT_NO
+        value: "3230082001"
+      - key: VIETQR_ACCOUNT_NAME
+        value: NGUYEN HOANG MINH NHAT
       - key: SAAS_BANK_NAME
-        value: Techcombank
+        value: MSB
       - key: SAAS_BANK_ACCOUNT
-        value: "9528677537"
+        value: "3230082001"
       - key: SAAS_BANK_HOLDER
         value: NGUYEN HOANG MINH NHAT
       - key: SAAS_BANK_QR_URL
         value: /billing/qr-bank.jpg
       - key: SAAS_BANK_TRANSFER_PREFIX
         value: BOBAPOS
+      - key: MOMO_ENABLED
+        value: false
       - key: MONGODB_URI
         sync: false
       - key: JWT_SECRET
         generateValue: true
       - key: CORS_ORIGIN
+        sync: false
+      - key: SEPAY_WEBHOOK_SECRET
+        sync: false
+      - key: PUBLIC_API_URL
         sync: false

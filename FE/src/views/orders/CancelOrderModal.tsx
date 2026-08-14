@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Order } from '@/models/order.model';
+import { Order, PaymentStatus } from '@/models/order.model';
 import { Modal } from '@/views/components/Modal';
 
 interface CancelOrderModalProps {
@@ -24,7 +24,9 @@ export function CancelOrderModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const isBankTransfer = order?.paymentMethod === 'BANK_TRANSFER';
+  const isBankTransferPaid =
+    order?.paymentMethod === 'BANK_TRANSFER' &&
+    order?.paymentStatus === PaymentStatus.PAID;
 
   const handleSubmit = async () => {
     if (!reason.trim() || reason.trim().length < 3) {
@@ -51,10 +53,9 @@ export function CancelOrderModal({
           {soloMode ? 'Hủy hóa đơn' : 'Hủy đơn'} #{order?.invoiceNumber ?? order?.orderNumber}
         </h2>
 
-        {isBankTransfer ? (
+        {isBankTransferPaid ? (
           <p className="mt-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-700">
-            Đơn thanh toán <strong>chuyển khoản</strong> không thể hủy vì không hoàn
-            tiền được cho khách.
+            Đơn <strong>chuyển khoản đã thanh toán</strong> không thể hủy.
           </p>
         ) : (
           <>
@@ -91,7 +92,7 @@ export function CancelOrderModal({
           </>
         )}
 
-        {isBankTransfer && (
+        {isBankTransferPaid && (
           <button
             type="button"
             onClick={onClose}

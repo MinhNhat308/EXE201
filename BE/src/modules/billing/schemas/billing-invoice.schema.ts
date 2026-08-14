@@ -37,6 +37,12 @@ export class BillingInvoice {
   @Prop()
   note?: string;
 
+  @Prop({ trim: true, uppercase: true })
+  paymentCode?: string;
+
+  @Prop()
+  paymentQrUrl?: string;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -56,6 +62,8 @@ BillingInvoiceSchema.set('toJSON', {
     periodStart: ret.periodStart,
     periodEnd: ret.periodEnd,
     note: ret.note,
+    paymentCode: ret.paymentCode,
+    paymentQrUrl: ret.paymentQrUrl,
     createdAt: ret.createdAt,
     updatedAt: ret.updatedAt,
   }),

@@ -18,6 +18,8 @@ import { AuthModule } from './modules/auth/auth.module';
 
 import { BillingModule } from './modules/billing/billing.module';
 
+import { PaymentsModule } from './modules/payments/payments.module';
+
 import { MenuModule } from './modules/menu/menu.module';
 
 import { OrdersModule } from './modules/orders/orders.module';
@@ -62,6 +64,7 @@ import { User, UserSchema } from './modules/users/schemas/user.schema';
 
 import { BranchesModule } from './modules/branches/branches.module';
 import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
+import { HealthController } from './health.controller';
 import { Branch, BranchSchema } from './modules/branches/schemas/branch.schema';
 import { Tenant, TenantSchema } from './modules/tenants/schemas/tenant.schema';
 
@@ -153,6 +156,8 @@ import { StockLot, StockLotSchema } from './modules/inventory/schemas/stock-lot.
 
     BillingModule,
 
+    PaymentsModule,
+
     PublicModule,
 
     AuthModule,
@@ -178,6 +183,8 @@ import { StockLot, StockLotSchema } from './modules/inventory/schemas/stock-lot.
     PlatformAdminModule,
 
   ],
+
+  controllers: [HealthController],
 
   providers: [
 

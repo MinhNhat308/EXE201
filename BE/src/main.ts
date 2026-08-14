@@ -3,7 +3,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
 import { AppModule } from './app.module';
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { rawBody: true });
 
   const envOrigins =
     process.env.CORS_ORIGIN?.split(',')
@@ -17,12 +17,21 @@ async function bootstrap() {
   const lanOrigin =
     /^https?:\/\/(192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3})(:\d+)?$/;
 
+  const isVercelOrigin = (origin: string) => {
+    try {
+      const url = new URL(origin);
+      return url.protocol === 'https:' && url.hostname.endsWith('.vercel.app');
+    } catch {
+      return false;
+    }
+  };
+
   app.enableCors({
     origin: (
       origin: string | undefined,
       callback: (err: Error | null, allow?: boolean) => void,
     ) => {
-      if (!origin || allowedOrigins.has(origin)) {
+      if (!origin || allowedOrigins.has(origin) || isVercelOrigin(origin)) {
         callback(null, true);
         return;
       }

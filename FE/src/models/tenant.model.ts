@@ -77,5 +77,7 @@ export interface BillingInvoice {
   currency: string;
   status: string;
   paymentMethod: string;
+  paymentCode?: string;
+  paymentQrUrl?: string;
   createdAt?: string;
 }

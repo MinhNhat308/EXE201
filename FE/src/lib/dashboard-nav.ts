@@ -85,6 +85,7 @@ export const OWNER_NAV_SECTIONS: NavSection[] = [
       { href: '/dashboard/admin/menu', label: 'Menu & món', feature: SaasFeature.MENU },
       { href: '/dashboard/admin/toppings', label: 'Topping', feature: SaasFeature.MENU },
       { href: '/dashboard/admin/payments', label: 'Hình thức TT', feature: SaasFeature.PAYMENTS },
+      { href: '/dashboard/admin/payments/logs', label: 'Log SePay', feature: SaasFeature.PAYMENTS },
       { href: '/dashboard/admin/store-settings', label: 'Thông tin cửa hàng', feature: SaasFeature.STORE_SETTINGS },
       { href: '/dashboard/admin/employees', label: 'Nhân viên', feature: SaasFeature.EMPLOYEES },
     ],

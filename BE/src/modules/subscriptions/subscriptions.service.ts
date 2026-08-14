@@ -8,7 +8,11 @@ import { Model, Types } from 'mongoose';
 import { SubscriptionPlan } from '../../common/enums/subscription-plan.enum';
 import { SubscriptionStatus } from '../../common/enums/subscription-status.enum';
 import { TenantStatus } from '../../common/enums/tenant-status.enum';
-import { PLAN_LIMITS, TRIAL_DAYS } from '../../common/saas/plan-limits';
+import {
+  PLAN_LIMITS,
+  SUBSCRIPTION_PERIOD_DAYS,
+  TRIAL_DAYS,
+} from '../../common/saas/plan-limits';
 import { Tenant, TenantDocument } from '../tenants/schemas/tenant.schema';
 import { Subscription, SubscriptionDocument } from './schemas/subscription.schema';
 
@@ -117,7 +121,7 @@ export class SubscriptionsService {
   async activateAfterPayment(
     tenantId: string,
     plan: SubscriptionPlan,
-    months = 1,
+    days = SUBSCRIPTION_PERIOD_DAYS,
   ) {
     const [tenant, sub] = await Promise.all([
       this.tenantModel.findById(tenantId).exec(),
@@ -127,7 +131,7 @@ export class SubscriptionsService {
 
     const now = new Date();
     const expiresAt = new Date(now);
-    expiresAt.setMonth(expiresAt.getMonth() + months);
+    expiresAt.setDate(expiresAt.getDate() + days);
 
     sub.plan = plan;
     sub.status = SubscriptionStatus.ACTIVE;

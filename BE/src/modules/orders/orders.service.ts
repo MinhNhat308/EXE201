@@ -20,7 +20,9 @@ import {
   getDayRangeInTimezone,
 } from '../../common/utils/day-range';
 import { getTenantId } from '../../common/tenant/tenant-context';
+import { PaymentStatus } from '../../common/enums/payment-status.enum';
 import { PaymentMethodsService } from '../payment-methods/payment-methods.service';
+import { PaymentsService } from '../payments/payments.service';
 import type { TodayReportResponse } from './dto/today-report.dto';
 import { InventoryService } from '../inventory/inventory.service';
 import { TenantsService } from '../tenants/tenants.service';
@@ -51,6 +53,7 @@ export class OrdersService {
   constructor(
     @InjectModel(Order.name) private readonly orderModel: Model<OrderDocument>,
     private readonly paymentMethodsService: PaymentMethodsService,
+    private readonly paymentsService: PaymentsService,
     private readonly tenantsService: TenantsService,
     @Inject(forwardRef(() => InventoryService))
     private readonly inventoryService: InventoryService,
@@ -165,8 +168,16 @@ export class OrdersService {
   ): Promise<OrderDocument> {
     const solo = await this.isSoloTenant(staff.tenantId);
     const status = solo ? OrderStatus.COMPLETED : OrderStatus.PENDING;
-    const order = await this.saveNewOrder(createOrderDto, staff, status);
-    if (solo) {
+    let order = await this.saveNewOrder(createOrderDto, staff, status);
+
+    if (order.paymentMethod === 'BANK_TRANSFER') {
+      order = await this.paymentsService.setupOrderBankPayment(order);
+    } else {
+      order.paymentStatus = PaymentStatus.PAID;
+      order = await order.save();
+    }
+
+    if (solo && order.paymentStatus === PaymentStatus.PAID) {
       await this.maybeDeductInventory(order);
     }
     return order;
@@ -254,6 +265,11 @@ export class OrdersService {
     if (workShift) filter.workShift = workShift;
     if (activeOnly) {
       filter.status = { $in: ACTIVE_STATUSES };
+      filter.$or = [
+        { paymentMethod: { $ne: 'BANK_TRANSFER' } },
+        { paymentStatus: PaymentStatus.PAID },
+        { paymentStatus: { $exists: false } },
+      ];
     }
     if (branchId) {
       filter.branchId = new Types.ObjectId(branchId);
@@ -452,9 +468,12 @@ export class OrdersService {
     const order = await this.findById(id);
     await this.assertCanModifyOrder(order);
 
-    if (order.paymentMethod === 'BANK_TRANSFER') {
+    if (
+      order.paymentMethod === 'BANK_TRANSFER' &&
+      order.paymentStatus === PaymentStatus.PAID
+    ) {
       throw new BadRequestException(
-        'Đơn chuyển khoản không thể hủy vì không hoàn tiền được',
+        'Đơn chuyển khoản đã thanh toán không thể hủy',
       );
     }
 

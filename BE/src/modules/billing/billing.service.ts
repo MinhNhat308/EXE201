@@ -7,8 +7,12 @@ import { InjectModel } from '@nestjs/mongoose';
 import { Model, Types } from 'mongoose';
 import { BillingInvoiceStatus } from '../../common/enums/billing-invoice-status.enum';
 import { SubscriptionPlan } from '../../common/enums/subscription-plan.enum';
-import { PLAN_PRICING_VND } from '../../common/saas/plan-limits';
+import {
+  PLAN_PRICING_VND,
+  SUBSCRIPTION_PERIOD_DAYS,
+} from '../../common/saas/plan-limits';
 import { SubscriptionsService } from '../subscriptions/subscriptions.service';
+import { PaymentsService } from '../payments/payments.service';
 import { MomoIpnPayload, MomoPaymentService } from './momo-payment.service';
 import { BillingInvoice, BillingInvoiceDocument } from './schemas/billing-invoice.schema';
 
@@ -19,6 +23,7 @@ export class BillingService {
     private readonly invoiceModel: Model<BillingInvoiceDocument>,
     private readonly subscriptionsService: SubscriptionsService,
     private readonly momoPayment: MomoPaymentService,
+    private readonly paymentsService: PaymentsService,
   ) {}
 
   momoConfig() {
@@ -65,13 +70,12 @@ export class BillingService {
   private async createPendingInvoice(
     tenantId: string,
     plan: SubscriptionPlan,
-    months: number,
-    paymentMethod: 'MANUAL' | 'MOMO',
+    paymentMethod: 'MANUAL' | 'MOMO' | 'BANK_TRANSFER',
   ) {
-    const amount = PLAN_PRICING_VND[plan] * months;
+    const amount = PLAN_PRICING_VND[plan];
     const now = new Date();
     const periodEnd = new Date(now);
-    periodEnd.setMonth(periodEnd.getMonth() + months);
+    periodEnd.setDate(periodEnd.getDate() + SUBSCRIPTION_PERIOD_DAYS);
 
     return new this.invoiceModel({
       tenantId: new Types.ObjectId(tenantId),
@@ -82,22 +86,27 @@ export class BillingService {
       paymentMethod,
       periodStart: now,
       periodEnd,
-      note: `Gia hạn ${months} tháng — ${plan}`,
+      note: `Gói ${SUBSCRIPTION_PERIOD_DAYS} ngày — ${plan}`,
     }).save();
   }
 
-  async createCheckout(tenantId: string, plan: SubscriptionPlan, months = 1) {
-    return this.createPendingInvoice(tenantId, plan, months, 'MANUAL');
+  async createCheckout(tenantId: string, plan: SubscriptionPlan) {
+    const invoice = await this.createPendingInvoice(
+      tenantId,
+      plan,
+      'BANK_TRANSFER',
+    );
+    return this.paymentsService.setupBillingBankPayment(invoice);
   }
 
-  async createMomoCheckout(tenantId: string, plan: SubscriptionPlan, months = 1) {
+  async createMomoCheckout(tenantId: string, plan: SubscriptionPlan) {
     if (!this.momoPayment.isEnabled()) {
       throw new BadRequestException(
         'MoMo chưa được cấu hình. Thêm MOMO_* vào BE/.env hoặc dùng chuyển khoản thủ công.',
       );
     }
 
-    const invoice = await this.createPendingInvoice(tenantId, plan, months, 'MOMO');
+    const invoice = await this.createPendingInvoice(tenantId, plan, 'MOMO');
     const orderId = invoice._id.toString();
 
     const momo = await this.momoPayment.createPayment({
@@ -129,20 +138,9 @@ export class BillingService {
     invoice.status = BillingInvoiceStatus.PAID;
     await invoice.save();
 
-    const periodStart = invoice.periodStart ?? new Date();
-    const periodEnd = invoice.periodEnd ?? new Date();
-    const months = Math.max(
-      1,
-      Math.round(
-        (periodEnd.getTime() - periodStart.getTime()) /
-          (1000 * 60 * 60 * 24 * 30),
-      ) || 1,
-    );
-
     await this.subscriptionsService.activateAfterPayment(
       invoice.tenantId.toString(),
       invoice.plan,
-      months,
     );
 
     return invoice;

@@ -38,22 +38,22 @@ export const BillingController = {
     return apiRequest<BillingInvoice>(`/billing/invoices/${invoiceId}`, { auth: true });
   },
 
-  checkout(plan: SubscriptionPlan, months = 1) {
+  checkout(plan: SubscriptionPlan) {
     invalidateCache('GET:/subscription');
     return apiRequest<BillingInvoice>('/billing/checkout', {
       method: 'POST',
       auth: true,
-      body: JSON.stringify({ plan, months }),
+      body: JSON.stringify({ plan }),
     });
   },
 
-  checkoutMomo(plan: SubscriptionPlan, months = 1) {
+  checkoutMomo(plan: SubscriptionPlan) {
     invalidateCache('GET:/subscription');
     invalidateCache('GET:/billing');
     return apiRequest<MomoCheckoutResponse>('/billing/checkout-momo', {
       method: 'POST',
       auth: true,
-      body: JSON.stringify({ plan, months }),
+      body: JSON.stringify({ plan }),
     });
   },
 

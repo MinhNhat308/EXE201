@@ -1,6 +1,12 @@
 import { Topping } from './menu.model';
 import { WorkShift } from './staff.model';
 
+export enum PaymentStatus {
+  NOT_REQUIRED = 'NOT_REQUIRED',
+  PENDING = 'PENDING',
+  PAID = 'PAID',
+}
+
 export enum OrderStatus {
   PENDING = 'PENDING',
   PREPARING = 'PREPARING',
@@ -70,6 +76,11 @@ export interface Order {
   subtotal: number;
   total: number;
   status: OrderStatus | string;
+  paymentStatus?: PaymentStatus | string;
+  paymentCode?: string;
+  paymentQrUrl?: string;
+  paymentBankInfo?: string;
+  paidAt?: string;
   cancelReason?: string;
   cancelledAt?: string;
   createdAt: string;

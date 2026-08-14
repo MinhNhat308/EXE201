@@ -43,25 +43,18 @@ export class BillingController {
   checkout(
     @CurrentUser() user: UserDocument,
     @Body('plan') plan: SubscriptionPlan,
-    @Body('months') months?: number,
   ) {
-    return this.billingService.createCheckout(
-      user.tenantId!.toString(),
-      plan,
-      months ?? 1,
-    );
+    return this.billingService.createCheckout(user.tenantId!.toString(), plan);
   }
 
   @Post('checkout-momo')
   checkoutMomo(
     @CurrentUser() user: UserDocument,
     @Body('plan') plan: SubscriptionPlan,
-    @Body('months') months?: number,
   ) {
     return this.billingService.createMomoCheckout(
       user.tenantId!.toString(),
       plan,
-      months ?? 1,
     );
   }
 

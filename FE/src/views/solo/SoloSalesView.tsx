@@ -6,7 +6,8 @@ import { OrderController } from '@/controllers/order.controller';
 import { BRAND } from '@/lib/brand';
 import { formatCurrency, formatDateTime } from '@/lib/format';
 import { SOLO_HUB_PATH } from '@/lib/workspace-routes';
-import { normalizeStatus, Order, OrderStatus } from '@/models/order.model';
+import { normalizeStatus, Order, OrderStatus, PaymentStatus } from '@/models/order.model';
+import { BankPaymentPanel } from '@/views/payments/BankPaymentPanel';
 import { CancelOrderModal } from '@/views/orders/CancelOrderModal';
 import { EditOrderModal } from '@/views/orders/EditOrderModal';
 import { InvoicePreview } from '@/views/staff/InvoicePreview';
@@ -14,9 +15,13 @@ import { SoloShellLayout } from './SoloShellLayout';
 import { getStoredTenant } from '@/lib/auth-storage';
 import { TenantInfo } from '@/models/tenant.model';
 
-/** Solo: mọi hóa đơn đã lưu (trừ hủy) đều tính doanh thu */
+/** Solo: hóa đơn tính doanh thu khi không hủy và (tiền mặt hoặc CK đã paid) */
 function isSoloRevenueOrder(o: Order): boolean {
-  return normalizeStatus(o.status) !== OrderStatus.CANCELLED;
+  if (normalizeStatus(o.status) === OrderStatus.CANCELLED) return false;
+  if (o.paymentMethod === 'BANK_TRANSFER' && o.paymentStatus === PaymentStatus.PENDING) {
+    return false;
+  }
+  return true;
 }
 
 export function SoloSalesView() {
@@ -114,7 +119,11 @@ export function SoloSalesView() {
   const canModifySelected =
     selected != null && normalizeStatus(selected.status) !== OrderStatus.CANCELLED;
   const canCancelSelected =
-    canModifySelected && selected?.paymentMethod !== 'BANK_TRANSFER';
+    canModifySelected &&
+    !(
+      selected?.paymentMethod === 'BANK_TRANSFER' &&
+      selected?.paymentStatus === PaymentStatus.PAID
+    );
 
   return (
     <SoloShellLayout title="Hóa đơn & doanh thu" backHref={SOLO_HUB_PATH}>
@@ -177,7 +186,11 @@ export function SoloSalesView() {
                     </div>
                     <p className="mt-0.5 text-xs text-stone-400">
                       {o.createdAt ? formatDateTime(o.createdAt) : '—'}
-                      {o.paymentMethod === 'CASH' ? ' · Tiền mặt' : ' · Chuyển khoản'}
+                      {o.paymentMethod === 'CASH'
+                        ? ' · Tiền mặt'
+                        : o.paymentStatus === PaymentStatus.PENDING
+                          ? ' · CK chờ TT'
+                          : ' · Chuyển khoản'}
                     </p>
                   </button>
                 </li>
@@ -222,9 +235,22 @@ export function SoloSalesView() {
                 Đóng
               </button>
             </div>
-            {selected.paymentMethod === 'BANK_TRANSFER' && canModifySelected && (
+            {selected.paymentMethod === 'BANK_TRANSFER' &&
+              selected.paymentStatus === PaymentStatus.PENDING && (
+              <BankPaymentPanel
+                order={selected}
+                compact
+                onPaid={(fresh) => {
+                  setSelected(fresh);
+                  void load(true);
+                }}
+              />
+            )}
+            {selected.paymentMethod === 'BANK_TRANSFER' &&
+              selected.paymentStatus === PaymentStatus.PAID &&
+              canModifySelected && (
               <p className="text-xs text-stone-500 print:hidden">
-                Hóa đơn chuyển khoản không thể hủy — chỉ sửa thông tin nếu cần.
+                Hóa đơn CK đã thanh toán — không thể hủy.
               </p>
             )}
             <InvoicePreview
@@ -238,6 +264,9 @@ export function SoloSalesView() {
               tableNumber={selected.tableNumber}
               note={selected.note}
               paymentMethod={selected.paymentMethod}
+              paymentQrImageUrl={selected.paymentQrUrl}
+              paymentBankInfo={selected.paymentBankInfo}
+              paymentCode={selected.paymentCode}
               staffName={selected.staffName}
               subtotal={selected.subtotal}
               total={selected.total}
