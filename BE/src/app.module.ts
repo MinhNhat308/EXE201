@@ -61,6 +61,7 @@ import { MenuItem, MenuItemSchema } from './modules/menu/schemas/menu-item.schem
 import { User, UserSchema } from './modules/users/schemas/user.schema';
 
 import { BranchesModule } from './modules/branches/branches.module';
+import { PlatformAdminModule } from './modules/platform-admin/platform-admin.module';
 import { Branch, BranchSchema } from './modules/branches/schemas/branch.schema';
 import { Tenant, TenantSchema } from './modules/tenants/schemas/tenant.schema';
 
@@ -174,6 +175,8 @@ import { StockLot, StockLotSchema } from './modules/inventory/schemas/stock-lot.
 
     BranchesModule,
 
+    PlatformAdminModule,
+
   ],
 
   providers: [
@@ -213,5 +216,4 @@ export class AppModule implements NestModule {
     consumer.apply(TenantContextMiddleware).forRoutes('*');
   }
 }
-
 

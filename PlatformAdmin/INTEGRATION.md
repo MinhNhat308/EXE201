@@ -22,6 +22,8 @@ Nguồn gốc admin portal: [Thormastran/exe201_bobapos](https://github.com/Thor
 | Nhân viên | `users` (role ≠ ADMIN) | STAFF, KITCHEN, … |
 | Đăng nhập admin | `platform_users` | **Tách** khỏi `users` POS |
 
+> Không dùng role `ADMIN` trong collection `users` để đăng nhập Platform Admin: tại BOBAPOS, đây là role chủ cửa hàng. Tài khoản quản trị nền tảng luôn nằm trong `platform_users` với role `platform_admin`.
+
 ## Map gói & trạng thái
 
 | BOBAPOS | Admin portal |
@@ -62,10 +64,27 @@ npm install && npm run dev
 - Nhân viên từng tenant
 - Hóa đơn thanh toán gói SaaS
 
-### Chưa có trên BOBAPOS (admin hiển thị rỗng / read-only)
+### Chưa có trên BOBAPOS (admin ẩn hoặc chỉ đọc)
 - **Licenses** — BOBAPOS dùng subscription, không có license key
 - **Contracts PDF** — map từ invoice, không tạo/sửa từ admin
 - **Tạo cửa hàng từ admin** — dùng `/register` trên BOBAPOS FE
+
+## Ghi dữ liệu an toàn
+
+Khuyến nghị cấu hình Admin backend gọi internal API của `EXE201/BE` để mọi thay đổi plan/status đi qua nghiệp vụ BOBAPOS:
+
+```env
+# EXE201/BE
+PLATFORM_ADMIN_INTERNAL_SECRET=<long-random-secret>
+
+# PlatformAdmin/backend
+BOBAPOS_INTERNAL_API_URL=http://localhost:3001/api/platform-admin
+BOBAPOS_INTERNAL_API_SECRET=<same-secret>
+```
+
+Nếu hai biến internal API chưa được cấu hình, bridge vẫn đọc/ghi trực tiếp MongoDB để tương thích ngược. Xóa tenant trong bridge luôn là **soft delete**: chuyển tenant và subscription sang `SUSPENDED`, không xóa dữ liệu vận hành.
+
+Frontend dùng `NEXT_PUBLIC_BOBAPOS_BRIDGE=true` để ẩn các thao tác không được bridge hỗ trợ (tạo tenant, sửa nhân viên/hóa đơn, licenses và CRUD plan).
 
 ### Khác biệt schema (đã xử lý trong bridge)
 - Tenant: `storeName` vs `name`

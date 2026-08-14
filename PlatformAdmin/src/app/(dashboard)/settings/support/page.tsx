@@ -12,8 +12,8 @@ export default function SettingsSupportPage() {
           <ArrowLeft className="h-4 w-4" />
           Quay lại Settings
         </Link>
-        <h1 className="text-3xl font-bold text-primary">Hỗ trợ</h1>
-        <p className="text-muted-foreground">Liên hệ đội ngũ TeaFlow nếu bạn cần trợ giúp về hệ thống.</p>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">Hỗ trợ</h1>
+        <p className="text-muted-foreground">Liên hệ đội ngũ BOBAPOS nếu bạn cần trợ giúp về hệ thống.</p>
       </div>
 
       <div className="grid gap-4 md:grid-cols-2">
@@ -25,11 +25,11 @@ export default function SettingsSupportPage() {
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
-            <p>Gửi yêu cầu hỗ trợ tới: <strong>support@teaflow.io</strong></p>
+            <p>Gửi yêu cầu hỗ trợ tới: <strong>support@bobapos.io</strong></p>
             <p>Thời gian phản hồi: 24 giờ làm việc.</p>
             <a
-              className="inline-flex h-10 items-center justify-center rounded-md border border-input bg-background px-4 text-sm font-semibold hover:bg-muted"
-              href="mailto:support@teaflow.io"
+              className="inline-flex h-10 items-center justify-center rounded-xl border border-stone-200 bg-white px-4 text-sm font-semibold text-stone-700 shadow-sm transition hover:bg-stone-50"
+              href="mailto:support@bobapos.io"
             >
               Gửi email
             </a>

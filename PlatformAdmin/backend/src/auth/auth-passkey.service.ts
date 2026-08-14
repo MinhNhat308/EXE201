@@ -149,7 +149,7 @@ export class AuthPasskeyService {
   private getWebAuthnConfig() {
     const origin = this.config.get<string>("FRONTEND_ORIGIN") ?? "http://localhost:3000";
     const rpID = this.config.get<string>("WEBAUTHN_RP_ID") ?? "localhost";
-    const rpName = this.config.get<string>("WEBAUTHN_RP_NAME") ?? "TeaFlow BobaPOS";
+    const rpName = this.config.get<string>("WEBAUTHN_RP_NAME") ?? "BOBAPOS Platform Admin";
     return { origin, rpID, rpName };
   }
 

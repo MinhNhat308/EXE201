@@ -36,11 +36,11 @@ export default function OwnerDetailPage() {
             Quay lại danh sách
           </Link>
           <p className="text-xs font-semibold uppercase text-muted-foreground">Owners</p>
-          <h1 className="text-3xl font-bold text-primary">Chi tiết owner</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">Chi tiết owner</h1>
         </div>
         <div className="flex flex-wrap gap-2">
           <Link
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-input bg-background px-4 text-sm font-semibold text-foreground hover:bg-muted"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-semibold text-stone-700 shadow-sm transition hover:bg-stone-50"
             href={`/owners/${params.ownerId}/edit`}
           >
             <Pencil className="h-4 w-4" />
@@ -48,7 +48,7 @@ export default function OwnerDetailPage() {
           </Link>
           <Button variant="destructive" onClick={() => setConfirmOpen(true)} disabled={deleteTenant.isPending}>
             <Trash2 className="h-4 w-4" />
-            Xóa
+            Tạm khóa cửa hàng
           </Button>
         </div>
       </div>
@@ -74,8 +74,8 @@ export default function OwnerDetailPage() {
       </Card>
       <ConfirmDialog
         open={confirmOpen}
-        title="Xóa owner"
-        description="Thao tác này không thể hoàn tác. Owner và cửa hàng liên quan sẽ bị xóa khỏi hệ thống."
+        title="Tạm khóa cửa hàng"
+        description="Owner không bị xóa; cửa hàng và gói đăng ký sẽ chuyển sang trạng thái tạm khóa."
         isLoading={deleteTenant.isPending}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={handleDelete}

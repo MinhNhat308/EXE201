@@ -22,6 +22,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils/cn";
 import { useDashboardOverview } from "@/modules/dashboard/api/dashboard.queries";
 import type { DashboardMetricDto, RegistrationTrendDto, RevenuePointDto } from "@/modules/dashboard/types/dashboard.types";
+import { platformCapabilities } from "@/config/capabilities";
 
 const metricIcons = {
   owners: UserCog,
@@ -31,10 +32,10 @@ const metricIcons = {
 };
 
 const metricTones = {
-  owners: "from-primary/15 text-primary ring-primary/15",
-  stores: "from-emerald-500/15 text-emerald-600 ring-emerald-500/15 dark:text-emerald-300",
-  employees: "from-indigo-500/15 text-indigo-600 ring-indigo-500/15 dark:text-indigo-300",
-  contractsExpiringSoon: "from-amber-500/15 text-amber-600 ring-amber-500/15 dark:text-amber-300"
+  owners: "bg-[#2F80ED]/10 text-[#2F80ED] ring-[#2F80ED]/15",
+  stores: "bg-emerald-50 text-emerald-600 ring-emerald-500/15 dark:text-emerald-300",
+  employees: "bg-indigo-50 text-indigo-600 ring-indigo-500/15 dark:text-indigo-300",
+  contractsExpiringSoon: "bg-amber-50 text-amber-600 ring-amber-500/15 dark:text-amber-300"
 };
 
 const planColors = ["bg-sky-400", "bg-primary", "bg-indigo-500", "bg-amber-400", "bg-emerald-500"];
@@ -81,7 +82,7 @@ function GrowthChart({ points }: { points: RegistrationTrendDto[] }) {
   const storeLine = buildPolyline(chartPoints.map((point) => point.stores), 490, 210);
 
   return (
-    <div className="relative h-[330px] overflow-hidden rounded-2xl border border-slate-200 bg-gradient-to-br from-white via-white to-blue-50/70 p-5 dark:border-slate-800 dark:from-slate-950 dark:via-slate-950 dark:to-blue-950/20">
+    <div className="relative h-[330px] overflow-hidden rounded-2xl border border-stone-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
       <div className="absolute inset-x-6 top-8 grid h-[230px] grid-rows-4">
         {[0, 1, 2, 3].map((line) => (
           <div key={line} className="border-t border-dashed border-slate-200 dark:border-slate-800" />
@@ -107,11 +108,11 @@ function RevenueBars({ points }: { points: RevenuePointDto[] }) {
   const max = Math.max(1, ...bars.map((point) => point.amount));
 
   return (
-    <div className="mt-6 flex h-56 items-end gap-3 rounded-2xl border border-slate-200 bg-gradient-to-b from-blue-50/60 to-white p-5 dark:border-slate-800 dark:from-blue-950/20 dark:to-slate-950">
+    <div className="mt-6 flex h-56 items-end gap-3 rounded-2xl border border-stone-200 bg-white p-5 dark:border-slate-800 dark:bg-slate-950">
       {bars.map((point) => (
         <div key={point.month} className="flex flex-1 flex-col items-center gap-3">
           <div
-            className="w-full rounded-t-xl bg-gradient-to-t from-primary to-sky-300 shadow-[0_8px_18px_rgba(47,128,237,0.20)] transition hover:opacity-80"
+            className="w-full rounded-t-xl bg-[#2F80ED] shadow-sm transition hover:bg-[#2569c7]"
             style={{ height: `${Math.max(4, (point.amount / max) * 100)}%` }}
           />
           <span className="text-[10px] font-bold uppercase text-slate-400">{point.month}</span>
@@ -125,10 +126,10 @@ function MetricCard({ metric }: { metric: DashboardMetricDto }) {
   const Icon = metricIcons[metric.key];
 
   return (
-    <Card className="group border-slate-200/80 bg-white/90 shadow-[0_12px_34px_rgba(15,23,42,0.04)] transition duration-200 hover:-translate-y-1 hover:shadow-[0_22px_48px_rgba(15,23,42,0.08)] dark:border-slate-800 dark:bg-slate-950">
+    <Card>
       <CardContent className="p-5">
         <div className="flex items-start justify-between">
-          <span className={cn("grid h-11 w-11 place-items-center rounded-2xl bg-gradient-to-br to-transparent ring-1", metricTones[metric.key])}>
+          <span className={cn("grid h-11 w-11 place-items-center rounded-2xl ring-1", metricTones[metric.key])}>
             <Icon className="h-5 w-5" />
           </span>
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300">
@@ -138,7 +139,7 @@ function MetricCard({ metric }: { metric: DashboardMetricDto }) {
         </div>
         <div className="mt-5">
           <p className="text-sm font-semibold text-slate-500 dark:text-slate-400">{metric.label}</p>
-          <p className="mt-2 text-3xl font-extrabold tracking-normal text-slate-950 dark:text-white">{formatNumber(metric.value)}</p>
+          <p className="mt-2 text-2xl font-bold tracking-normal text-stone-900 dark:text-white">{formatNumber(metric.value)}</p>
           <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">{metric.detail}</p>
         </div>
       </CardContent>
@@ -151,18 +152,23 @@ export function DashboardOverview() {
   const data = overview.data;
   const totalPlans = data?.planOverview.reduce((sum, plan) => sum + plan.value, 0) ?? 0;
   const growthRate = data?.revenue.growthRate ?? 0;
+  const quickActions = [
+    ...(platformCapabilities.canCreateTenant ? [{ label: "Create Owner", href: "/owners/new", icon: UserCog }] : []),
+    ...(platformCapabilities.canManageBillingRecords ? [{ label: "Create Billing Record", href: "/contracts/new", icon: FileText }] : []),
+    ...(platformCapabilities.canManageEmployees ? [{ label: "Add Employee", href: "/employees/new", icon: Users }] : [])
+  ];
 
   return (
     <div className="space-y-8">
-      <section className="relative overflow-hidden rounded-2xl border border-primary/10 bg-gradient-to-br from-white via-white to-blue-50 p-6 shadow-sm dark:border-primary/20 dark:from-slate-950 dark:via-slate-950 dark:to-blue-950/20 lg:p-8">
+      <section className="relative overflow-hidden rounded-2xl border border-stone-200 bg-white p-6 shadow-sm dark:border-slate-800 dark:bg-slate-950">
         <div className="relative flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/15 bg-white/70 px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-primary shadow-sm backdrop-blur dark:bg-slate-900/70">
               <ShieldCheck className="h-3.5 w-3.5" />
               System Administrator Console
             </div>
-            <h1 className="max-w-3xl text-3xl font-extrabold tracking-normal text-slate-950 dark:text-white lg:text-4xl">
-              TeaFlow platform command center
+            <h1 className="max-w-3xl text-2xl font-bold tracking-tight text-stone-900 dark:text-white">
+              BOBAPOS platform command center
             </h1>
             <p className="mt-3 max-w-2xl text-base leading-7 text-slate-600 dark:text-slate-400">
               Manage owners, stores, employees, contracts, subscriptions, and platform health across the BobaPOS network.
@@ -173,15 +179,17 @@ export function DashboardOverview() {
               <Download className="h-4 w-4" />
               Export Report
             </button> */}
-            <Link href="/owners/new" className="inline-flex h-11 items-center gap-2 rounded-2xl bg-primary px-4 text-sm font-bold text-white shadow-[0_14px_28px_rgba(47,128,237,0.25)] transition hover:-translate-y-0.5 hover:bg-primary/90">
-              <Plus className="h-4 w-4" />
-              Create Owner
-            </Link>
+            {platformCapabilities.canCreateTenant ? (
+              <Link href="/owners/new" className="inline-flex items-center gap-2 rounded-xl bg-[#2F80ED] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#2569c7]">
+                <Plus className="h-4 w-4" />
+                Create Owner
+              </Link>
+            ) : null}
           </div>
         </div>
       </section>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {(data?.metrics ?? []).map((metric) => (
           <MetricCard key={metric.key} metric={metric} />
         ))}
@@ -213,11 +221,7 @@ export function DashboardOverview() {
               <CardTitle className="text-lg font-extrabold">Quick Actions</CardTitle>
             </CardHeader>
             <CardContent className="grid gap-3 p-5 pt-0">
-              {[
-                { label: "Create Owner", href: "/owners/new", icon: UserCog },
-                { label: "Create Contract", href: "/contracts/new", icon: FileText },
-                { label: "Add Employee", href: "/employees/new", icon: Users }
-              ].map((action) => {
+              {quickActions.length > 0 ? quickActions.map((action) => {
                 const Icon = action.icon;
                 return (
                   <Link key={action.label} href={action.href} className="group flex h-12 items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-bold text-slate-700 transition hover:-translate-y-0.5 hover:border-primary/30 hover:bg-white hover:text-primary hover:shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-900">
@@ -228,14 +232,14 @@ export function DashboardOverview() {
                     <ArrowUpRight className="h-4 w-4 opacity-40 transition group-hover:opacity-100" />
                   </Link>
                 );
-              })}
+              }) : <p className="text-sm text-slate-500">Các thao tác dữ liệu được thực hiện trong BOBAPOS.</p>}
             </CardContent>
           </Card>
 
-          <Card className="border-slate-200/80 bg-gradient-to-br from-slate-950 to-slate-800 text-white shadow-[0_18px_40px_rgba(15,23,42,0.20)] dark:border-slate-800">
+          <Card>
             <CardHeader className="p-5">
-              <CardTitle className="flex items-center gap-2 text-lg font-extrabold text-white">
-                <Zap className="h-5 w-5 text-primary" />
+              <CardTitle className="flex items-center gap-2">
+                <Zap className="h-5 w-5 text-[#2F80ED]" />
                 System Health
               </CardTitle>
             </CardHeader>
@@ -247,12 +251,12 @@ export function DashboardOverview() {
               ].map((item) => {
                 const Icon = item.icon;
                 return (
-                  <div key={item.label} className="flex items-center justify-between rounded-2xl bg-white/8 px-3 py-3 ring-1 ring-white/10 backdrop-blur">
-                    <span className="flex items-center gap-3 text-sm font-semibold text-slate-200">
-                      <Icon className="h-4 w-4 text-emerald-300" />
+                  <div key={item.label} className="flex items-center justify-between rounded-2xl border border-stone-200 bg-stone-50 px-3 py-3">
+                    <span className="flex items-center gap-3 text-sm font-semibold text-stone-700">
+                      <Icon className="h-4 w-4 text-emerald-600" />
                       {item.label}
                     </span>
-                    <span className="text-sm font-bold text-emerald-300">{item.value}</span>
+                    <span className="text-sm font-bold text-emerald-600">{item.value}</span>
                   </div>
                 );
               })}
@@ -292,7 +296,7 @@ export function DashboardOverview() {
                 { label: "Total Stores", value: formatNumber(data?.metrics.find((metric) => metric.key === "stores")?.value ?? 0), icon: Building2 },
                 { label: "Active Owners", value: formatNumber(data?.metrics.find((metric) => metric.key === "owners")?.value ?? 0), icon: UserCog },
                 { label: "Monthly Revenue", value: formatCurrency(data?.revenue.monthlyRevenue ?? 0), icon: BarChart3 },
-                { label: "Active Contracts", value: formatNumber(data?.revenue.activeSubscriptions ?? 0), icon: FileText }
+                { label: "Paid Invoices", value: formatNumber(data?.revenue.activeSubscriptions ?? 0), icon: FileText }
               ].map((item) => {
                 const Icon = item.icon;
                 return (

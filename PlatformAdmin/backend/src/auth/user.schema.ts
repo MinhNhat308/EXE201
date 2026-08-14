@@ -2,6 +2,7 @@ import { Prop, Schema, SchemaFactory } from "@nestjs/mongoose";
 import { HydratedDocument } from "mongoose";
 
 export type UserDocument = HydratedDocument<User>;
+export const PLATFORM_ADMIN_ROLE = "platform_admin";
 
 @Schema({ _id: false })
 export class PasskeyCredential {
@@ -29,7 +30,7 @@ export class User {
   @Prop({ required: true, trim: true })
   fullName: string;
 
-  @Prop({ required: true, default: "admin" })
+  @Prop({ required: true, default: PLATFORM_ADMIN_ROLE })
   role: string;
 
   @Prop()

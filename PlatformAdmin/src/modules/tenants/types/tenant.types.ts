@@ -18,6 +18,12 @@ export type TenantDto = {
   setupFee?: number;
   monthlyFee?: number;
   discount?: number;
+  subscriptionStatus?: string | null;
+  subscriptionPlan?: string | null;
+  expiresAt?: string | null;
+  trialExpiredAt?: string | null;
+  maxEmployees?: number | null;
+  maxBranches?: number | null;
   createdAt: string;
   updatedAt: string;
 };

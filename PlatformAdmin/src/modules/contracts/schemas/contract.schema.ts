@@ -6,7 +6,7 @@ export const contractSchema = z.object({
   startDate: z.string().min(1),
   endDate: z.string().min(1),
   amount: z.coerce.number().positive(),
-  status: z.enum(["active", "pending", "expired", "completed"]).optional(),
+  status: z.enum(["active", "pending", "cancelled", "expired", "completed"]).optional(),
   durationMonths: z.coerce.number().int().positive().optional(),
   additionalTerms: z.string().optional()
 });

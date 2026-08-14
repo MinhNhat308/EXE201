@@ -1,4 +1,4 @@
-export type ContractStatus = "active" | "pending" | "expired" | "completed";
+export type ContractStatus = "active" | "pending" | "cancelled" | "expired" | "completed";
 
 export type ContractDto = {
   id: string;
@@ -12,6 +12,7 @@ export type ContractDto = {
   amount: number;
   durationMonths?: number;
   additionalTerms?: string;
+  paymentMethod?: string;
   createdAt: string;
 };
 

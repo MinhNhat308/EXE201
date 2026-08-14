@@ -28,12 +28,12 @@ export function SearchFilter({
   return (
     <div className="flex flex-col gap-3 md:flex-row md:items-center">
       <div className="relative md:max-w-md md:flex-1">
-        <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Search className="pointer-events-none absolute left-3 top-2.5 h-4 w-4 text-stone-400" />
         <Input
           value={search}
           onChange={(event) => onSearchChange(event.target.value)}
           placeholder="Search..."
-          className="pl-9"
+          className="rounded-xl border-stone-200 bg-white pl-9 text-stone-900 shadow-sm focus:ring-[#2F80ED]/30"
         />
       </div>
       {filterOptions.map((filter) => (
@@ -41,7 +41,7 @@ export function SearchFilter({
           key={filter.key}
           value={filters[filter.key] ?? ""}
           onChange={(event) => onFilterChange(filter.key, event.target.value)}
-          className="md:w-48"
+          className="rounded-xl border-stone-200 bg-white text-stone-700 shadow-sm focus:ring-[#2F80ED]/30 md:w-48"
         >
           <option value="">{filter.label}</option>
           {filter.options.map((option) => (
@@ -51,7 +51,7 @@ export function SearchFilter({
           ))}
         </Select>
       ))}
-      <SlidersHorizontal className="hidden h-4 w-4 text-muted-foreground md:block" />
+      <SlidersHorizontal className="hidden h-4 w-4 text-stone-400 md:block" />
     </div>
   );
 }

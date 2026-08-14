@@ -1,10 +1,5 @@
-import { AuthLayout } from "@/components/layouts/auth-layout";
-import { RegisterForm } from "@/modules/auth/components/register-form";
+import { redirect } from "next/navigation";
 
 export default function RegisterPage() {
-  return (
-    <AuthLayout title="Khởi tạo tài khoản quản trị BobaPOS">
-      <RegisterForm />
-    </AuthLayout>
-  );
+  redirect("/login");
 }

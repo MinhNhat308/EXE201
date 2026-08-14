@@ -3,14 +3,14 @@
 import type { TenantDto } from "@/modules/tenants/types/tenant.types";
 
 const planLabels: Record<string, string> = {
-  starter: "Starter",
-  premium: "Premium",
-  enterprise: "Enterprise"
+  solo: "Solo",
+  standard: "Store",
+  premium: "Chain"
 };
 
 export function TenantDetailFields({ tenant }: { tenant: TenantDto }) {
   const formatCurrency = (value?: number) =>
-    value !== undefined ? `$${value.toLocaleString("en-US", { minimumFractionDigits: 2 })}` : "—";
+    value !== undefined ? `${value.toLocaleString("vi-VN")}₫` : "—";
 
   return (
     <>

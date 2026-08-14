@@ -49,11 +49,13 @@ export class SubscriptionPlansService {
   }
 
   async create(payload: any) {
+    if (this.useBridge()) throw new BadRequestException("BOBAPOS plans are managed by the POS backend");
     const plan = await this.planModel.create(this.normalizePayload(payload));
     return toDto(plan);
   }
 
   async update(id: string, payload: any) {
+    if (this.useBridge()) throw new BadRequestException("BOBAPOS plans are managed by the POS backend");
     const plan = await this.planModel.findById(id).exec();
     if (!plan) {
       throw new NotFoundException("Subscription plan not found");
@@ -72,6 +74,7 @@ export class SubscriptionPlansService {
   }
 
   async remove(id: string) {
+    if (this.useBridge()) throw new BadRequestException("BOBAPOS plans are managed by the POS backend");
     const plan = await this.planModel.findById(id).exec();
     if (!plan) {
       throw new NotFoundException("Subscription plan not found");

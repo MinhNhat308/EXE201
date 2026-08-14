@@ -19,7 +19,7 @@ export default function NewContractPage() {
             <ArrowLeft className="h-4 w-4" />
             Quay lại danh sách
           </Link>
-          <h1 className="text-3xl font-bold text-slate-950 dark:text-white">Tạo hợp đồng mới</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">Tạo hợp đồng mới</h1>
         </div>
         <Button form="contract-create-form" className="w-fit min-w-44 rounded-xl shadow-[0_10px_20px_rgba(47,128,237,0.25)]" disabled={createContract.isPending} >
           Tạo và Gửi hợp đồng

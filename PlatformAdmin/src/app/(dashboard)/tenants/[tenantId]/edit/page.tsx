@@ -22,7 +22,7 @@ export default function EditTenantPage() {
             <ArrowLeft className="h-4 w-4" />
             Quay lại chi tiết
           </Link>
-          <h1 className="text-3xl font-bold text-primary">Chỉnh sửa cửa hàng</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">Chỉnh sửa cửa hàng</h1>
         </div>
         <Button form="tenant-edit-form" className="min-w-40" disabled={updateTenant.isPending || tenant.isLoading}>
           Lưu thay đổi

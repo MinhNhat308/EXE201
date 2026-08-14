@@ -27,10 +27,10 @@ export default function LicenseDetailPage() {
             <ArrowLeft className="h-4 w-4" />
             Quay lại danh sách
           </Link>
-          <h1 className="text-3xl font-bold text-primary">Chi tiết license</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">Chi tiết license</h1>
         </div>
         <div className="flex gap-2">
-          <Link className="inline-flex h-10 items-center gap-2 rounded-md border px-4 text-sm font-semibold hover:bg-muted" href={`/licenses/${params.licenseId}/edit`}>
+          <Link className="inline-flex h-10 items-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-semibold text-stone-700 shadow-sm transition hover:bg-stone-50" href={`/licenses/${params.licenseId}/edit`}>
             <Pencil className="h-4 w-4" />
             Chỉnh sửa
           </Link>

@@ -2,6 +2,7 @@ import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from
 import { Reflector } from "@nestjs/core";
 import { IS_PUBLIC_KEY } from "./public.decorator";
 import { TokenService } from "./token.service";
+import { PLATFORM_ADMIN_ROLE } from "./user.schema";
 
 @Injectable()
 export class AuthGuard implements CanActivate {
@@ -27,6 +28,9 @@ export class AuthGuard implements CanActivate {
     }
 
     const payload = this.tokenService.verify(token, "access");
+    if (payload.role !== PLATFORM_ADMIN_ROLE) {
+      throw new UnauthorizedException("Platform administrator access is required");
+    }
     request.user = payload;
     return true;
   }

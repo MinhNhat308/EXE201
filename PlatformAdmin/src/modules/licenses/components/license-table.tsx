@@ -46,7 +46,7 @@ export function LicenseTable() {
         {
           key: "plan",
           label: "Plan",
-          options: ["starter", "premium", "enterprise"].map((value) => ({ label: value, value }))
+          options: ["solo", "standard", "premium"].map((value) => ({ label: value, value }))
         }
       ]}
     />

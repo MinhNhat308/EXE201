@@ -16,9 +16,8 @@ export class AuthController {
     return this.authService.login(payload);
   }
 
-  @Public()
   @Post("register")
-  register(@Body() payload: { fullName: string; email: string; password: string; role?: string }) {
+  register(@Body() payload: { fullName: string; email: string; password: string }) {
     return this.authService.register(payload);
   }
 

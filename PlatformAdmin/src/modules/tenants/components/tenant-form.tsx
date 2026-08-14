@@ -16,6 +16,7 @@ import type { CreateTenantDto, TenantDto, TenantStatus, UpdateTenantDto } from "
 
 type TenantFormValues = z.infer<typeof tenantSchema>;
 type FieldError = string | undefined;
+const PLAN_PRICE_VND: Record<string, number> = { solo: 99_000, standard: 299_000, premium: 599_000 };
 
 const inputClassName =
   "h-9 rounded-none border-0 border-b border-slate-300 bg-transparent px-0 text-sm shadow-none focus:ring-0 focus:border-primary dark:border-slate-700 dark:bg-transparent";
@@ -55,9 +56,9 @@ function toFormValues(tenant?: TenantDto): TenantFormValues {
     address: tenant?.address ?? "",
     ownerPhone: tenant?.ownerPhone ?? "",
     accountRole: (tenant?.accountRole as "super_admin" | "manager") ?? "super_admin",
-    softwareVersion: tenant?.softwareVersion ?? "v2.4.1",
+    softwareVersion: tenant?.softwareVersion ?? "BOBAPOS",
     contractDurationMonths: tenant?.contractDurationMonths ?? 12,
-    setupFee: tenant?.setupFee ?? 250,
+    setupFee: tenant?.setupFee ?? 0,
     monthlyFee: tenant?.monthlyFee ?? 0,
     discount: tenant?.discount ?? 0
   };
@@ -82,9 +83,9 @@ export function TenantForm({
 }) {
   const subscriptionPlans = useSubscriptionPlansOverview();
   const planOptions = subscriptionPlans.data?.plans.filter((planOption) => planOption.status === "active") ?? [
-    { name: "Starter", value: "starter", price: 0 },
-    { name: "Premium", value: "premium", price: 1200 },
-    { name: "Enterprise", value: "enterprise", price: 2400 }
+    { name: "Solo", value: "solo", price: "99.000₫/tháng" },
+    { name: "Store", value: "standard", price: "299.000₫/tháng" },
+    { name: "Chain", value: "premium", price: "599.000₫/tháng" }
   ];
   const schema = mode === "create" ? createTenantSchema : updateTenantSchema;
   const form = useForm<TenantFormValues & { initialPassword?: string }>({
@@ -107,14 +108,14 @@ export function TenantForm({
   const plan = form.watch("plan");
   const status = form.watch("status") ?? "active";
   const location = form.watch("location");
-  const softwareVersion = form.watch("softwareVersion") ?? "v2.4.1";
+  const softwareVersion = form.watch("softwareVersion") ?? "BOBAPOS";
   const setupFee = Number(form.watch("setupFee") ?? 0);
   const monthlyFee = Number(form.watch("monthlyFee") ?? 0);
   const discount = Number(form.watch("discount") ?? 0);
   const contractDurationMonths = Number(form.watch("contractDurationMonths") ?? 12);
   const selectedPlan = planOptions.find((planOption) => planOption.value === plan);
   const planLabel = selectedPlan?.name ?? (plan ? plan.charAt(0).toUpperCase() + plan.slice(1) : "Premium");
-  const effectiveMonthlyFee = monthlyFee || Number(selectedPlan?.price ?? 0) || 0;
+  const effectiveMonthlyFee = monthlyFee || PLAN_PRICE_VND[plan] || 0;
   const totalInitial = setupFee + effectiveMonthlyFee - discount;
 
   const handleSubmit = (values: TenantFormValues & { initialPassword?: string }) => {
@@ -218,10 +219,7 @@ export function TenantForm({
                 className={inputClassName}
                 {...form.register("plan", {
                   onChange: (event) => {
-                    const selected = planOptions.find((planOption) => planOption.value === event.target.value);
-                    if (selected?.price) {
-                      form.setValue("monthlyFee", Number(selected.price));
-                    }
+                    form.setValue("monthlyFee", PLAN_PRICE_VND[event.target.value] ?? 0);
                   }
                 })}
               >
@@ -237,8 +235,7 @@ export function TenantForm({
             <div className="space-y-1.5">
               <FieldLabel>Phiên bản phần mềm</FieldLabel>
               <Select className={inputClassName} {...form.register("softwareVersion")}>
-                <option value="v2.4.1">v2.4.1 (Stable)</option>
-                <option value="v2.5.0">v2.5.0 (Beta)</option>
+                <option value="BOBAPOS">BOBAPOS SaaS</option>
               </Select>
             </div>
             <div className="space-y-1.5">
@@ -250,15 +247,15 @@ export function TenantForm({
               </Select>
             </div>
             <div className="space-y-1.5">
-              <FieldLabel>Phí thiết lập (USD)</FieldLabel>
+              <FieldLabel>Phí thiết lập (VND)</FieldLabel>
               <Input className={inputClassName} type="number" {...form.register("setupFee")} />
             </div>
             <div className="space-y-1.5">
-              <FieldLabel>Phí hàng tháng (USD)</FieldLabel>
+              <FieldLabel>Phí hàng tháng (VND)</FieldLabel>
               <Input className={inputClassName} type="number" {...form.register("monthlyFee")} />
             </div>
             <div className="space-y-1.5">
-              <FieldLabel>Giảm giá (USD)</FieldLabel>
+              <FieldLabel>Giảm giá (VND)</FieldLabel>
               <Input className={inputClassName} type="number" {...form.register("discount")} />
             </div>
             <div className="space-y-1.5 md:col-span-3">

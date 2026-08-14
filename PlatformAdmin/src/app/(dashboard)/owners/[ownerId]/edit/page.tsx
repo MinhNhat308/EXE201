@@ -22,7 +22,7 @@ export default function EditOwnerPage() {
             <ArrowLeft className="h-4 w-4" />
             Quay lại chi tiết
           </Link>
-          <h1 className="text-3xl font-bold text-primary">Chỉnh sửa owner</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">Chỉnh sửa owner</h1>
         </div>
         <Button form="owner-edit-form" className="min-w-40" disabled={updateTenant.isPending || tenant.isLoading}>
           Lưu thay đổi

@@ -47,10 +47,12 @@ export function mapBobaposTenantStatus(status?: string): AdminTenantStatus {
   switch ((status ?? '').toUpperCase()) {
     case 'ACTIVE':
       return 'active';
+    case 'INACTIVE':
     case 'EXPIRED':
       return 'inactive';
     case 'SUSPENDED':
       return 'suspended';
+    case 'PENDING':
     case 'TRIAL':
     default:
       return 'pending';

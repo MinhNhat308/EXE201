@@ -31,7 +31,7 @@ export function EmployeeTable() {
       onStateChange={tableState.setTableState}
       filterOptions={[
         { key: "status", label: "Status", options: ["active", "pending", "inactive"].map((value) => ({ label: value, value })) },
-        { key: "role", label: "Role", options: ["admin", "manager", "staff"].map((value) => ({ label: value, value })) }
+        { key: "role", label: "Role", options: ["manager", "accounting", "warehouse", "kitchen", "staff"].map((value) => ({ label: value, value })) }
       ]}
     />
   );

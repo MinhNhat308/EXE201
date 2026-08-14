@@ -19,7 +19,7 @@ export default function EditLicensePage() {
           <ArrowLeft className="h-4 w-4" />
           Quay lại chi tiết
         </Link>
-        <h1 className="text-3xl font-bold text-primary">Chỉnh sửa license</h1>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">Chỉnh sửa license</h1>
       </div>
       {license.data ? (
         <LicenseForm

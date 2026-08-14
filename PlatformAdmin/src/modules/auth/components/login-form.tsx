@@ -50,7 +50,7 @@ export function LoginForm() {
             <input
               id="email"
               type="email"
-              placeholder="admin@teaflow.io"
+              placeholder="admin@bobapos.io"
               className="h-12 w-full border-0 border-b-2 border-[#c7cbd7] bg-transparent pr-10 text-base text-[#111d2f] outline-none placeholder:text-[#b7bac4] focus:border-primary"
               {...form.register("email")}
             />
@@ -106,14 +106,9 @@ export function LoginForm() {
         <p className="mt-3 text-center text-sm font-semibold text-destructive">Email hoặc mật khẩu không đúng.</p>
       ) : null}
 
-      <div className="mt-20 border-t border-[#eef1f6] pt-10">
-        <p className="text-center text-sm text-[#555c6b]">
-          Bạn mới sử dụng nền tảng này?{" "}
-          <Link href="/register" className="text-primary hover:underline">
-            Tạo tài khoản mới.
-          </Link>
-        </p>
-      </div>
+      <p className="mt-12 text-center text-sm text-[#555c6b]">
+        Tài khoản quản trị được cấp nội bộ bởi BOBAPOS.
+      </p>
     </form>
   );
 }

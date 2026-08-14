@@ -2,7 +2,7 @@ import { Injectable, Logger, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectModel } from "@nestjs/mongoose";
 import { Model } from "mongoose";
-import { User, UserDocument } from "../auth/user.schema";
+import { PLATFORM_ADMIN_ROLE, User, UserDocument } from "../auth/user.schema";
 import { hashPassword } from "../auth/password.util";
 import { Contract, ContractDocument } from "../contracts/contract.schema";
 import { Employee, EmployeeDocument } from "../employees/employee.schema";
@@ -17,16 +17,16 @@ const TEST_PASSWORD = "Test@123456";
 const DEMO_PASSWORD = "12345678";
 
 const DEMO_USERS = [
-  { email: "user1@teaflow.test", fullName: "Nguyen Van A", role: "admin" },
-  { email: "user2@teaflow.test", fullName: "Tran Thi B", role: "super_admin" },
-  { email: "user3@teaflow.test", fullName: "Le Van C", role: "manager" },
-  { email: "user4@teaflow.test", fullName: "Pham Thi D", role: "manager" },
-  { email: "user5@teaflow.test", fullName: "Hoang Van E", role: "staff" },
-  { email: "user6@teaflow.test", fullName: "Vo Thi F", role: "staff" },
-  { email: "user7@teaflow.test", fullName: "Dang Van G", role: "staff" },
-  { email: "user8@teaflow.test", fullName: "Bui Thi H", role: "staff" },
-  { email: "user9@teaflow.test", fullName: "Do Van I", role: "staff" },
-  { email: "user10@teaflow.test", fullName: "Ngo Thi K", role: "staff" }
+  { email: "user1@teaflow.test", fullName: "Nguyen Van A", role: PLATFORM_ADMIN_ROLE },
+  { email: "user2@teaflow.test", fullName: "Tran Thi B", role: PLATFORM_ADMIN_ROLE },
+  { email: "user3@teaflow.test", fullName: "Le Van C", role: PLATFORM_ADMIN_ROLE },
+  { email: "user4@teaflow.test", fullName: "Pham Thi D", role: PLATFORM_ADMIN_ROLE },
+  { email: "user5@teaflow.test", fullName: "Hoang Van E", role: PLATFORM_ADMIN_ROLE },
+  { email: "user6@teaflow.test", fullName: "Vo Thi F", role: PLATFORM_ADMIN_ROLE },
+  { email: "user7@teaflow.test", fullName: "Dang Van G", role: PLATFORM_ADMIN_ROLE },
+  { email: "user8@teaflow.test", fullName: "Bui Thi H", role: PLATFORM_ADMIN_ROLE },
+  { email: "user9@teaflow.test", fullName: "Do Van I", role: PLATFORM_ADMIN_ROLE },
+  { email: "user10@teaflow.test", fullName: "Ngo Thi K", role: PLATFORM_ADMIN_ROLE }
 ];
 
 @Injectable()
@@ -70,19 +70,21 @@ export class SeederService implements OnModuleInit {
 
   /** Chỉ tạo tài khoản platform admin — không seed tenant demo khi dùng chung DB BOBAPOS */
   private async seedPlatformAdminOnly() {
-    const email = "admin@bobapos.io";
-    const existing = await this.userModel.findOne({ email }).exec();
-    if (existing) return;
-
-    await this.userModel.create({
-      email,
-      fullName: "BOBAPOS Platform Admin",
-      role: "admin",
-      isActive: true,
-      passwordHash: hashPassword("Admin@123456"),
-      ssoProviders: []
-    });
-    this.logger.log(`Platform admin seeded: ${email} / Admin@123456`);
+    const email = this.config.get<string>("PLATFORM_ADMIN_EMAIL", "admin@bobapos.io").toLowerCase();
+    const configuredPassword = this.config.get<string>("PLATFORM_ADMIN_PASSWORD")?.trim();
+    if (!configuredPassword && this.config.get<string>("NODE_ENV") === "production") {
+      throw new Error("PLATFORM_ADMIN_PASSWORD is required in production");
+    }
+    const password = configuredPassword ?? "Admin@123456";
+    await this.userModel.findOneAndUpdate(
+      { email },
+      {
+        $set: { fullName: "BOBAPOS Platform Admin", role: PLATFORM_ADMIN_ROLE, isActive: true },
+        $setOnInsert: { passwordHash: hashPassword(password), ssoProviders: [] }
+      },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    ).exec();
+    this.logger.log(`Platform admin is ready: ${email}`);
   }
 
   private async seedSubscriptionPlans() {
@@ -308,7 +310,7 @@ export class SeederService implements OnModuleInit {
       {
         email: "admin@teaflow.io",
         fullName: "System Admin",
-        role: "admin",
+        role: PLATFORM_ADMIN_ROLE,
         isActive: true,
         ssoProviders: ["google", "microsoft"],
         seedPassword: "Admin@123456"
@@ -316,7 +318,7 @@ export class SeederService implements OnModuleInit {
       ...Array.from(tenants.values()).map((tenant) => ({
         email: tenant.ownerEmail,
         fullName: tenant.ownerName,
-        role: tenant.accountRole ?? "super_admin",
+        role: PLATFORM_ADMIN_ROLE,
         tenantId: tenant._id.toString(),
         isActive: tenant.status !== "suspended",
         ssoProviders: tenant.status === "active" ? ["google"] : [],
@@ -325,7 +327,7 @@ export class SeederService implements OnModuleInit {
       {
         email: "manager@teaflow.test",
         fullName: "QA Manager",
-        role: "manager",
+        role: PLATFORM_ADMIN_ROLE,
         tenantId: this.tenantId(tenants, "owner.emerald@teaflow.test"),
         isActive: true,
         ssoProviders: ["microsoft"],
@@ -334,7 +336,7 @@ export class SeederService implements OnModuleInit {
       {
         email: "inactive@teaflow.test",
         fullName: "Inactive QA User",
-        role: "staff",
+        role: PLATFORM_ADMIN_ROLE,
         tenantId: this.tenantId(tenants, "owner.lotus@teaflow.test"),
         isActive: false,
         ssoProviders: [],
@@ -343,7 +345,7 @@ export class SeederService implements OnModuleInit {
       {
         email: "reset@teaflow.test",
         fullName: "Password Reset Tester",
-        role: "staff",
+        role: PLATFORM_ADMIN_ROLE,
         tenantId: this.tenantId(tenants, "owner.azure@teaflow.test"),
         isActive: true,
         resetCode: "123456",

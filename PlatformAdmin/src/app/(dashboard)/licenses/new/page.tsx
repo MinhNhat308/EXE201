@@ -17,7 +17,7 @@ export default function NewLicensePage() {
           <ArrowLeft className="h-4 w-4" />
           Quay lại danh sách
         </Link>
-        <h1 className="text-3xl font-bold text-primary">Tạo license mới</h1>
+        <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">Tạo license mới</h1>
       </div>
       <LicenseForm
         isSubmitting={createLicense.isPending}

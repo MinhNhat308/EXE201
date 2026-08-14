@@ -4,9 +4,10 @@ import { Model } from "mongoose";
 import { toDto } from "../common/mongo";
 import { hashPassword, verifyPassword } from "./password.util";
 import { TokenService } from "./token.service";
-import { User, UserDocument } from "./user.schema";
+import { PLATFORM_ADMIN_ROLE, User, UserDocument } from "./user.schema";
 
 const allowedSsoProviders = new Set(["google", "microsoft"]);
+const allowedPlatformRoles = new Set([PLATFORM_ADMIN_ROLE, "admin", "super_admin"]);
 
 @Injectable()
 export class AuthService {
@@ -20,11 +21,17 @@ export class AuthService {
     if (!user || !verifyPassword(payload.password, user.passwordHash)) {
       throw new UnauthorizedException("Email or password is incorrect");
     }
+    this.assertPlatformAdmin(user);
+
+    if (user.role !== PLATFORM_ADMIN_ROLE) {
+      user.role = PLATFORM_ADMIN_ROLE;
+      await user.save();
+    }
 
     return this.createTokenResponse(user);
   }
 
-  async register(payload: { fullName: string; email: string; password: string; role?: string }) {
+  async register(payload: { fullName: string; email: string; password: string }) {
     const email = payload.email.toLowerCase();
     const existingUser = await this.userModel.findOne({ email }).exec();
     if (existingUser) {
@@ -34,7 +41,7 @@ export class AuthService {
     const user = await this.userModel.create({
       fullName: payload.fullName,
       email,
-      role: payload.role ?? "admin",
+      role: PLATFORM_ADMIN_ROLE,
       passwordHash: hashPassword(payload.password),
       isActive: true
     });
@@ -57,18 +64,7 @@ export class AuthService {
       throw new UnauthorizedException("Unsupported SSO provider");
     }
 
-    const email = payload.email.toLowerCase();
-    const user = await this.userModel.findOne({ email, isActive: true }).exec();
-    if (!user) {
-      throw new UnauthorizedException("No account linked to this SSO identity");
-    }
-
-    if (!user.ssoProviders.includes(provider)) {
-      user.ssoProviders = [...(user.ssoProviders ?? []), provider];
-      await user.save();
-    }
-
-    return this.createTokenResponse(user);
+    throw new UnauthorizedException("SSO is disabled until provider tokens are verified server-side");
   }
 
   async forgotPassword(payload: { email: string }) {
@@ -125,6 +121,7 @@ export class AuthService {
   }
 
   private createTokenResponse(user: UserDocument) {
+    this.assertPlatformAdmin(user);
     const authUser = this.toAuthUser(user);
     return {
       accessToken: this.tokenService.sign(authUser, 60 * 60 * 8, "access"),
@@ -134,14 +131,21 @@ export class AuthService {
   }
 
   private toAuthUser(user: UserDocument) {
+    this.assertPlatformAdmin(user);
     const dto = toDto<Record<string, any>>(user)!;
     return {
       sub: dto.id,
       id: dto.id,
       email: dto.email,
       fullName: dto.fullName,
-      role: dto.role,
+      role: PLATFORM_ADMIN_ROLE,
       tenantId: dto.tenantId
     };
+  }
+
+  private assertPlatformAdmin(user: UserDocument) {
+    if (!allowedPlatformRoles.has(user.role)) {
+      throw new UnauthorizedException("Platform administrator access is required");
+    }
   }
 }

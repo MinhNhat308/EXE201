@@ -21,11 +21,11 @@ export default function NewTenantPage() {
             <span>/</span>
             <span className="text-primary">Đăng ký mới</span>
           </div>
-          <h1 className="text-3xl font-bold text-primary">Tạo người thuê mới</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">Tạo người thuê mới</h1>
           <p className="max-w-2xl text-muted-foreground">Khởi tạo hệ thống mới cho hạ tầng BobaPOS. Tất cả thông tin đều bắt buộc cho bước kiểm tra ban đầu.</p>
         </div>
         <div className="flex items-center gap-3">
-          <Link className="inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm font-semibold text-slate-600 hover:bg-muted dark:text-slate-300" href="/tenants">
+          <Link className="inline-flex h-10 items-center gap-2 rounded-xl border border-stone-200 bg-white px-3 text-sm font-semibold text-stone-700 shadow-sm transition hover:bg-stone-50" href="/tenants">
             <ArrowLeft className="h-4 w-4" />
             Trở lại danh sách
           </Link>

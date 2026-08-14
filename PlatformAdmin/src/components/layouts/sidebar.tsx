@@ -17,14 +17,16 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils/cn";
+import { platformCapabilities } from "@/config/capabilities";
+import { useAuthStore } from "@/modules/auth/stores/auth.store";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   { href: "/owners", label: "Owners", icon: UserCog },
   { href: "/tenants", label: "Stores", icon: Store },
   { href: "/employees", label: "Employees", icon: Users },
-  { href: "/contracts", label: "Contracts", icon: FileText },
-  { href: "/licenses", label: "Licenses", icon: KeyRound },
+  { href: "/contracts", label: "Billing", icon: FileText },
+  ...(platformCapabilities.licensesEnabled ? [{ href: "/licenses", label: "Licenses", icon: KeyRound }] : []),
   { href: "/subscription-plans", label: "Subscription Plans", icon: ClipboardList },
 
   { href: "/settings", label: "Settings", icon: Settings }
@@ -32,6 +34,7 @@ const navItems = [
 
 export function Sidebar() {
   const pathname = usePathname();
+  const user = useAuthStore((state) => state.user);
 
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-[296px] flex-col border-r border-slate-200/80 bg-white/85 px-5 py-6 shadow-[12px_0_40px_rgba(15,23,42,0.03)] backdrop-blur-xl dark:border-slate-800 dark:bg-slate-950/80 lg:flex">
@@ -40,7 +43,7 @@ export function Sidebar() {
           <Image src="/Layer_1.svg" alt="BOBA POS" width={25} height={31} className="h-8 w-[26px]" priority />
         </span>
         <span>
-          <span className="block text-lg font-extrabold tracking-normal text-slate-950 dark:text-white">TeaFlow</span>
+          <span className="block text-lg font-extrabold tracking-normal text-slate-950 dark:text-white">BOBAPOS</span>
           <span className="block text-xs font-semibold uppercase tracking-[0.16em] text-primary">BobaPOS Admin</span>
         </span>
       </Link>
@@ -93,8 +96,8 @@ export function Sidebar() {
             SA
           </div>
           <div className="min-w-0">
-            <p className="truncate text-sm font-bold text-slate-950 dark:text-white">System Admin</p>
-            <p className="truncate text-xs text-slate-500 dark:text-slate-400">admin@teaflow.io</p>
+            <p className="truncate text-sm font-bold text-slate-950 dark:text-white">{user?.fullName ?? "Platform Admin"}</p>
+            <p className="truncate text-xs text-slate-500 dark:text-slate-400">{user?.email ?? "admin@bobapos.io"}</p>
           </div>
         </div>
       </div>

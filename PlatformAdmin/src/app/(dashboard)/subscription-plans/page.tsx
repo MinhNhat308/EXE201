@@ -15,6 +15,7 @@ import {
   useUpdateSubscriptionPlan
 } from "@/modules/subscription-plans/api/subscription-plan.queries";
 import type { CreateSubscriptionPlanDto, SubscriptionPlanDto } from "@/modules/subscription-plans/types/subscription-plan.types";
+import { platformCapabilities } from "@/config/capabilities";
 
 const metricIcons = [ClipboardList, Users, Building2, FileText];
 
@@ -96,7 +97,7 @@ function PlanFormDialog({
       <form className="w-full max-w-2xl rounded-lg bg-white p-6 shadow-xl dark:bg-slate-950" onSubmit={submit}>
         <div className="mb-5">
           <h2 className="text-lg font-bold text-slate-950 dark:text-white">{plan ? "Chỉnh sửa plan" : "Tạo plan mới"}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Plan value là mã dùng để gắn owner/store vào gói, ví dụ starter, premium.</p>
+          <p className="mt-1 text-sm text-muted-foreground">Plan value dùng mã BOBAPOS: solo, standard hoặc premium.</p>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           <div className="space-y-1.5">
@@ -125,7 +126,7 @@ function PlanFormDialog({
           <div className="space-y-1.5 md:col-span-2">
             <label className="text-xs font-bold uppercase text-slate-500">Features, mỗi dòng một item</label>
             <textarea
-              className="min-h-28 w-full rounded-md border border-input bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring dark:bg-slate-950"
+              className="min-h-28 w-full rounded-xl border border-stone-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#2F80ED]/30 dark:bg-slate-950"
               value={values.features.join("\n")}
               onChange={(event) => setField("features", event.target.value.split("\n"))}
             />
@@ -151,19 +152,20 @@ export default function SubscriptionPlansPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between gap-4">
+      <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <p className="text-xs font-semibold uppercase text-muted-foreground">Subscription Plans</p>
-          <h1 className="text-3xl font-bold text-primary">Quản lý gói dịch vụ</h1>
-          <p className="text-muted-foreground">Theo dõi các gói đang dùng bởi owner, cửa hàng và hợp đồng trong hệ thống.</p>
+          <p className="text-xs font-semibold uppercase tracking-wider text-[#2F80ED]">Subscription Plans</p>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">Quản lý gói dịch vụ</h1>
+          <p className="mt-1 text-sm text-stone-500">Theo dõi các gói đang dùng bởi owner, cửa hàng và hợp đồng trong hệ thống.</p>
         </div>
-        <button className="inline-flex h-10 items-center gap-2 rounded-md bg-primary px-4 text-sm font-semibold text-white" onClick={() => setCreatingPlan(true)}>
-          <Plus className="h-4 w-4" />
-          Tạo plan mới
-        </button>
+        {platformCapabilities.canManagePlans ? (
+          <button className="inline-flex items-center gap-2 rounded-xl bg-[#2F80ED] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-[#2569c7]" onClick={() => setCreatingPlan(true)}>
+            <Plus className="h-4 w-4" /> Tạo plan mới
+          </button>
+        ) : <span className="rounded-full bg-stone-100 px-3 py-1.5 text-xs font-semibold text-stone-500">Định nghĩa bởi BOBAPOS</span>}
       </div>
 
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {(data?.metrics ?? []).map((metric, index) => {
           const Icon = metricIcons[index] ?? ClipboardList;
           return (
@@ -197,7 +199,7 @@ export default function SubscriptionPlansPage() {
             </CardHeader>
             <CardContent className="space-y-5">
               <div>
-                <p className="text-3xl font-bold text-primary">{plan.price}</p>
+                <p className="text-2xl font-bold text-[#2F80ED]">{plan.price}</p>
                 <p className="text-sm text-muted-foreground">{plan.price === "Custom" ? "Theo hợp đồng" : "per owner/month"}</p>
               </div>
 
@@ -212,7 +214,7 @@ export default function SubscriptionPlansPage() {
                 </div>
                 <div>
                   <p className="font-bold text-primary">{formatNumber(plan.activeContracts)}</p>
-                  <p className="text-muted-foreground">Contracts</p>
+                  <p className="text-muted-foreground">Paid invoices</p>
                 </div>
               </div>
 
@@ -235,7 +237,7 @@ export default function SubscriptionPlansPage() {
                   </p>
                 ))}
               </div>
-              <div className="flex justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
+              {platformCapabilities.canManagePlans ? <div className="flex justify-end gap-2 border-t border-slate-100 pt-4 dark:border-slate-800">
                 <Button variant="outline" size="sm" onClick={() => setEditingPlan(plan)}>
                   <Edit className="h-4 w-4" />
                   Sửa
@@ -244,7 +246,7 @@ export default function SubscriptionPlansPage() {
                   <Trash2 className="h-4 w-4" />
                   Xóa
                 </Button>
-              </div>
+              </div> : null}
             </CardContent>
           </Card>
         ))}
@@ -291,9 +293,9 @@ export default function SubscriptionPlansPage() {
           </table>
         </CardContent>
       </Card>
-      {creatingPlan ? <PlanFormDialog open={creatingPlan} onClose={() => setCreatingPlan(false)} /> : null}
-      {editingPlan ? <PlanFormDialog plan={editingPlan} open={Boolean(editingPlan)} onClose={() => setEditingPlan(undefined)} /> : null}
-      {deletingPlan ? (
+      {platformCapabilities.canManagePlans && creatingPlan ? <PlanFormDialog open={creatingPlan} onClose={() => setCreatingPlan(false)} /> : null}
+      {platformCapabilities.canManagePlans && editingPlan ? <PlanFormDialog plan={editingPlan} open={Boolean(editingPlan)} onClose={() => setEditingPlan(undefined)} /> : null}
+      {platformCapabilities.canManagePlans && deletingPlan ? (
         <ConfirmDialog
           open={Boolean(deletingPlan)}
           title="Delete subscription plan"

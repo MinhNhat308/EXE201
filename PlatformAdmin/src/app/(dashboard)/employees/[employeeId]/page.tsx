@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { StatusBadge } from "@/components/common/status-badge";
 import { useDeleteEmployee, useEmployee } from "@/modules/employees/api/employee.queries";
 import { useTenant } from "@/modules/tenants/api/tenant.queries";
+import { platformCapabilities } from "@/config/capabilities";
 
 export default function EmployeeDetailPage() {
   const params = useParams<{ employeeId: string }>();
@@ -36,11 +37,11 @@ export default function EmployeeDetailPage() {
             <ArrowLeft className="h-4 w-4" />
             Quay lại danh sách
           </Link>
-          <h1 className="text-3xl font-bold text-primary">Thông tin nhân viên</h1>
+          <h1 className="mt-1 text-2xl font-bold tracking-tight text-stone-900">Thông tin nhân viên</h1>
         </div>
-        <div className="flex flex-wrap gap-2">
+        {platformCapabilities.canManageEmployees ? <div className="flex flex-wrap gap-2">
           <Link
-            className="inline-flex h-10 items-center justify-center gap-2 rounded-md border border-input bg-background px-4 text-sm font-semibold text-foreground hover:bg-muted"
+            className="inline-flex h-10 items-center justify-center gap-2 rounded-xl border border-stone-200 bg-white px-4 text-sm font-semibold text-stone-700 shadow-sm transition hover:bg-stone-50"
             href={`/employees/${params.employeeId}/edit`}
           >
             <Pencil className="h-4 w-4" />
@@ -50,7 +51,7 @@ export default function EmployeeDetailPage() {
             <Trash2 className="h-4 w-4" />
             Xóa
           </Button>
-        </div>
+        </div> : <span className="rounded-full bg-stone-100 px-3 py-1.5 text-xs font-semibold text-stone-500">Chỉ xem</span>}
       </div>
       <Card>
         <CardHeader><CardTitle>{employee.data?.fullName ?? "Loading..."}</CardTitle></CardHeader>
@@ -63,14 +64,14 @@ export default function EmployeeDetailPage() {
           <p>Last login: {employee.data?.lastLoginAt ?? "N/A"}</p>
         </CardContent>
       </Card>
-      <ConfirmDialog
+      {platformCapabilities.canManageEmployees ? <ConfirmDialog
         open={confirmOpen}
         title="Xóa nhân viên"
         description="Thao tác này không thể hoàn tác. Nhân viên sẽ bị xóa khỏi hệ thống."
         isLoading={deleteEmployee.isPending}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={handleDelete}
-      />
+      /> : null}
     </div>
   );
 }

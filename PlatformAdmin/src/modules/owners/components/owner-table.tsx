@@ -54,7 +54,7 @@ export function OwnerTable() {
       onStateChange={tableState.setTableState}
       filterOptions={[
         { key: "status", label: "Status", options: ["active", "pending", "inactive", "suspended"].map((value) => ({ label: value, value })) },
-        { key: "plan", label: "Plan", options: ["starter", "premium", "enterprise"].map((value) => ({ label: value, value })) }
+        { key: "plan", label: "Plan", options: ["solo", "standard", "premium"].map((value) => ({ label: value, value })) }
       ]}
     />
   );

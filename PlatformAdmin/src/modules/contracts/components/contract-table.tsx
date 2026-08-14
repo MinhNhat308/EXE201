@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { useContracts, useDeleteContract } from "@/modules/contracts/api/contract.queries";
 import { useContractTableStore } from "@/modules/contracts/stores/contract-table.store";
 import type { ContractDto } from "@/modules/contracts/types/contract.types";
+import { platformCapabilities } from "@/config/capabilities";
 
 function ContractActions({ contract }: { contract: ContractDto }) {
   const [open, setOpen] = useState(false);
@@ -48,7 +49,7 @@ const columns: ColumnDef<ContractDto>[] = [
   { accessorKey: "endDate", header: "End" },
   { accessorKey: "status", header: "Status", cell: ({ row }) => <StatusBadge status={row.original.status} /> },
   { accessorKey: "amount", header: "Amount", cell: ({ row }) => new Intl.NumberFormat("vi-VN").format(row.original.amount) },
-  { id: "actions", header: "Actions", enableSorting: false, cell: ({ row }) => <ContractActions contract={row.original} /> }
+  { id: "actions", header: "Actions", enableSorting: false, cell: ({ row }) => platformCapabilities.canManageBillingRecords ? <ContractActions contract={row.original} /> : <span className="text-xs text-muted-foreground">Read only</span> }
 ];
 
 export function ContractTable() {
@@ -64,8 +65,8 @@ export function ContractTable() {
       isLoading={query.isLoading}
       onStateChange={tableState.setTableState}
       filterOptions={[
-        { key: "status", label: "Status", options: ["active", "pending", "expired", "completed"].map((value) => ({ label: value, value })) },
-        { key: "plan", label: "Plan", options: ["saas_subscription", "franchise", "support"].map((value) => ({ label: value, value })) }
+        { key: "status", label: "Status", options: ["active", "pending", "cancelled"].map((value) => ({ label: value, value })) },
+        { key: "plan", label: "Plan", options: ["solo", "standard", "premium"].map((value) => ({ label: value, value })) }
       ]}
     />
   );

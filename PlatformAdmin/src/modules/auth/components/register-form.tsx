@@ -70,7 +70,7 @@ export function RegisterForm() {
             <input
               id="email"
               type="email"
-              placeholder="admin@teaflow.io"
+              placeholder="admin@bobapos.io"
               className="h-12 w-full border-0 border-b-2 border-[#c7cbd7] bg-transparent pr-10 text-base text-[#111d2f] outline-none placeholder:text-[#b7bac4] focus:border-primary"
               {...form.register("email")}
             />

@@ -6,7 +6,7 @@ import { BobaposBridgeService } from "../bobapos/bobapos-bridge.service";
 import { paginate, toDto } from "../common/mongo";
 import type { QueryParams } from "../common/types";
 import { hashPassword } from "../auth/password.util";
-import { User, UserDocument } from "../auth/user.schema";
+import { PLATFORM_ADMIN_ROLE, User, UserDocument } from "../auth/user.schema";
 import { Tenant, TenantDocument } from "./tenant.schema";
 
 @Injectable()
@@ -71,7 +71,7 @@ export class TenantsService {
       await this.userModel.create({
         fullName: tenant.ownerName,
         email,
-        role: tenant.accountRole ?? "super_admin",
+        role: PLATFORM_ADMIN_ROLE,
         tenantId: tenant._id.toString(),
         passwordHash: hashPassword(initialPassword),
         isActive: true

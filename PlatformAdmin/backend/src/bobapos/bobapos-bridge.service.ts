@@ -1,7 +1,12 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model, Types } from 'mongoose';
-import type { QueryParams } from '../common/types';
+import {
+  BadGatewayException,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
+import { InjectModel } from "@nestjs/mongoose";
+import { Model, Types } from "mongoose";
+import type { QueryParams } from "../common/types";
 import {
   BobaposBillingInvoice,
   BobaposBillingInvoiceDocument,
@@ -11,7 +16,7 @@ import {
   BobaposTenantDocument,
   BobaposUser,
   BobaposUserDocument,
-} from './bobapos.schema';
+} from "./bobapos.schema";
 import {
   BOBAPOS_PLAN_DEFINITIONS,
   mapAdminPlanToBobapos,
@@ -21,9 +26,11 @@ import {
   mapBobaposTenantStatus,
   planLabel,
   planPriceVnd,
-} from './bobapos.mapper';
+} from "./bobapos.mapper";
 
 export type AdminTenantDto = Record<string, unknown>;
+
+const OWNER_ROLES = ["ADMIN", "admin", "super_admin"];
 
 @Injectable()
 export class BobaposBridgeService {
@@ -36,17 +43,23 @@ export class BobaposBridgeService {
     private readonly bobaposUserModel: Model<BobaposUserDocument>,
     @InjectModel(BobaposBillingInvoice.name)
     private readonly invoiceModel: Model<BobaposBillingInvoiceDocument>,
+    private readonly config: ConfigService,
   ) {}
 
   async findAllTenants(params: QueryParams) {
     const page = Number(params.page ?? 1);
     const limit = Number(params.limit ?? 10);
-    const search = String(params.search ?? '').trim().toLowerCase();
+    const search = String(params.search ?? "")
+      .trim()
+      .toLowerCase();
 
     const [rawTenants, subs, owners] = await Promise.all([
       this.tenantModel.find().sort({ createdAt: -1 }).lean().exec(),
       this.subscriptionModel.find().lean().exec(),
-      this.bobaposUserModel.find({ role: 'ADMIN' }).lean().exec(),
+      this.bobaposUserModel
+        .find({ role: { $in: OWNER_ROLES } })
+        .lean()
+        .exec(),
     ]);
 
     const subByTenant = new Map(subs.map((s) => [String(s.tenantId), s]));
@@ -58,13 +71,30 @@ export class BobaposBridgeService {
     );
 
     let rows = rawTenants.map((t) =>
-      this.toTenantDto(t, subByTenant.get(String(t._id)), ownerByTenant.get(String(t._id)) ?? (t.ownerUserId ? ownerById.get(String(t.ownerUserId)) : undefined)),
+      this.toTenantDto(
+        t,
+        subByTenant.get(String(t._id)),
+        ownerByTenant.get(String(t._id)) ??
+          (t.ownerUserId ? ownerById.get(String(t.ownerUserId)) : undefined),
+      ),
     );
 
     if (search) {
       rows = rows.filter((row) =>
-        ['name', 'ownerName', 'ownerEmail', 'plan', 'status', 'slug', 'address', 'location']
-          .some((key) => String(row[key] ?? '').toLowerCase().includes(search)),
+        [
+          "name",
+          "ownerName",
+          "ownerEmail",
+          "plan",
+          "status",
+          "slug",
+          "address",
+          "location",
+        ].some((key) =>
+          String(row[key] ?? "")
+            .toLowerCase()
+            .includes(search),
+        ),
       );
     }
 
@@ -95,7 +125,7 @@ export class BobaposBridgeService {
 
   async findOneTenant(id: string): Promise<AdminTenantDto> {
     const tenant = await this.tenantModel.findById(id).lean().exec();
-    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (!tenant) throw new NotFoundException("Tenant not found");
 
     const [sub, owner] = await Promise.all([
       this.subscriptionModel.findOne({ tenantId: tenant._id }).lean().exec(),
@@ -105,43 +135,88 @@ export class BobaposBridgeService {
     return this.toTenantDto(tenant, sub ?? undefined, owner ?? undefined);
   }
 
-  async updateTenant(id: string, payload: Record<string, unknown>): Promise<AdminTenantDto> {
+  async updateTenant(
+    id: string,
+    payload: Record<string, unknown>,
+  ): Promise<AdminTenantDto> {
+    if (this.useInternalApi()) {
+      await this.callInternalApi(`/tenants/${id}`, "PATCH", payload);
+      return this.findOneTenant(id);
+    }
     const tenant = await this.tenantModel.findById(id).exec();
-    if (!tenant) throw new NotFoundException('Tenant not found');
+    if (!tenant) throw new NotFoundException("Tenant not found");
+    const subscriptionUpdate: Record<string, unknown> = {};
 
-    if (payload.name) tenant.set('storeName', payload.name);
-    if (payload.address) tenant.set('settings.address', payload.address);
-    if (payload.ownerPhone) tenant.set('settings.phone', payload.ownerPhone);
+    if (payload.name) tenant.set("storeName", payload.name);
+    if (payload.address) tenant.set("settings.address", payload.address);
+    if (payload.ownerPhone) tenant.set("settings.phone", payload.ownerPhone);
 
     if (payload.status) {
       const reverse: Record<string, string> = {
-        active: 'ACTIVE',
-        inactive: 'EXPIRED',
-        suspended: 'SUSPENDED',
-        pending: 'TRIAL',
+        active: "ACTIVE",
+        inactive: "EXPIRED",
+        suspended: "SUSPENDED",
+        pending: "TRIAL",
       };
-      tenant.set('status', reverse[String(payload.status)] ?? 'TRIAL');
+      const nextStatus = reverse[String(payload.status)] ?? "TRIAL";
+      tenant.set("status", nextStatus);
+      subscriptionUpdate.status = nextStatus;
+
+      if (nextStatus === "ACTIVE") {
+        const currentSubscription = await this.subscriptionModel
+          .findOne({ tenantId: tenant._id })
+          .lean()
+          .exec();
+        const currentExpiry = currentSubscription?.expiresAt
+          ? new Date(currentSubscription.expiresAt)
+          : null;
+        if (!currentExpiry || currentExpiry.getTime() <= Date.now()) {
+          const expiresAt = new Date();
+          expiresAt.setMonth(expiresAt.getMonth() + 1);
+          subscriptionUpdate.expiresAt = expiresAt;
+          subscriptionUpdate.startedAt = new Date();
+          tenant.set("subscriptionExpiredAt", expiresAt);
+        }
+      }
     }
 
     if (payload.plan) {
       const bobPlan = mapAdminPlanToBobapos(String(payload.plan));
-      tenant.set('packageType', bobPlan);
-      await this.subscriptionModel
-        .updateOne({ tenantId: tenant._id }, { $set: { plan: bobPlan } })
-        .exec();
+      const planLimits: Record<
+        string,
+        { maxEmployees: number; maxBranches: number }
+      > = {
+        SOLO: { maxEmployees: 1, maxBranches: 1 },
+        STANDARD: { maxEmployees: 10, maxBranches: 1 },
+        PREMIUM: { maxEmployees: 9999, maxBranches: 9999 },
+      };
+      tenant.set("packageType", bobPlan);
+      subscriptionUpdate.plan = bobPlan;
+      Object.assign(subscriptionUpdate, planLimits[bobPlan]);
     }
 
     await tenant.save();
+    if (Object.keys(subscriptionUpdate).length > 0) {
+      await this.subscriptionModel
+        .updateOne({ tenantId: tenant._id }, { $set: subscriptionUpdate })
+        .exec();
+    }
     return this.findOneTenant(id);
   }
 
   async removeTenant(id: string) {
-    await this.tenantModel.findByIdAndDelete(id).exec();
-    await Promise.all([
-      this.subscriptionModel.deleteMany({ tenantId: new Types.ObjectId(id) }).exec(),
-      this.bobaposUserModel.deleteMany({ tenantId: new Types.ObjectId(id) }).exec(),
-      this.invoiceModel.deleteMany({ tenantId: new Types.ObjectId(id) }).exec(),
-    ]);
+    if (this.useInternalApi()) {
+      await this.callInternalApi(`/tenants/${id}`, "DELETE");
+      return { ok: true, mode: "soft-delete", status: "suspended" };
+    }
+    const tenant = await this.tenantModel.findById(id).exec();
+    if (!tenant) throw new NotFoundException("Tenant not found");
+    tenant.set("status", "SUSPENDED");
+    await tenant.save();
+    await this.subscriptionModel
+      .updateOne({ tenantId: tenant._id }, { $set: { status: "SUSPENDED" } })
+      .exec();
+    return { ok: true, mode: "soft-delete", status: "suspended" };
   }
 
   async getDashboardOverview() {
@@ -153,10 +228,15 @@ export class BobaposBridgeService {
       this.tenantModel.find().lean().exec(),
       this.subscriptionModel.find().lean().exec(),
       this.invoiceModel.find().lean().exec(),
-      this.bobaposUserModel.find({ role: { $ne: 'ADMIN' }, tenantId: { $exists: true } }).lean().exec(),
+      this.bobaposUserModel
+        .find({ role: { $nin: OWNER_ROLES }, tenantId: { $exists: true } })
+        .lean()
+        .exec(),
     ]);
 
-    const activeTenants = tenants.filter((t) => mapBobaposTenantStatus(t.status) === 'active');
+    const activeTenants = tenants.filter(
+      (t) => mapBobaposTenantStatus(t.status) === "active",
+    );
     const activeEmployees = employees.filter((e) => e.isActive !== false);
 
     const expiringSoon = subs.filter((s) => {
@@ -174,15 +254,39 @@ export class BobaposBridgeService {
     const registrationTrends = this.buildRegistrationTrends(tenants, now);
     const revenue = this.buildRevenue(invoices, now);
     const recentTenants = tenants
-      .sort((a, b) => new Date(b.createdAt ?? 0).getTime() - new Date(a.createdAt ?? 0).getTime())
+      .sort(
+        (a, b) =>
+          new Date(b.createdAt ?? 0).getTime() -
+          new Date(a.createdAt ?? 0).getTime(),
+      )
       .slice(0, 4);
 
     return {
       metrics: [
-        { key: 'owners', label: 'Chủ cửa hàng active', value: activeTenants.length, detail: `${tenants.length} tổng cửa hàng` },
-        { key: 'stores', label: 'Cửa hàng', value: tenants.length, detail: `${activeTenants.length} đang active` },
-        { key: 'employees', label: 'Nhân viên active', value: activeEmployees.length, detail: `${employees.length} tổng NV` },
-        { key: 'contractsExpiringSoon', label: 'Gói sắp hết hạn', value: expiringSoon, detail: '30 ngày tới' },
+        {
+          key: "owners",
+          label: "Chủ cửa hàng active",
+          value: activeTenants.length,
+          detail: `${tenants.length} tổng cửa hàng`,
+        },
+        {
+          key: "stores",
+          label: "Cửa hàng",
+          value: tenants.length,
+          detail: `${activeTenants.length} đang active`,
+        },
+        {
+          key: "employees",
+          label: "Nhân viên active",
+          value: activeEmployees.length,
+          detail: `${employees.length} tổng NV`,
+        },
+        {
+          key: "contractsExpiringSoon",
+          label: "Gói sắp hết hạn",
+          value: expiringSoon,
+          detail: "30 ngày tới",
+        },
       ],
       registrationTrends,
       planOverview: [...planCounts.entries()].map(([label, value]) => ({
@@ -192,25 +296,32 @@ export class BobaposBridgeService {
       recentActivities: [
         ...recentTenants.map((t) => ({
           id: `tenant-${t._id}`,
-          activity: 'Cửa hàng đăng ký',
-          user: 'BOBAPOS',
+          activity: "Cửa hàng đăng ký",
+          user: "BOBAPOS",
           target: t.storeName ?? t.slug,
           status: mapBobaposTenantStatus(t.status),
           createdAt: (t.createdAt ?? new Date()).toISOString(),
         })),
         ...invoices.slice(-4).map((inv) => ({
           id: `inv-${inv._id}`,
-          activity: 'Hóa đơn gói',
-          user: 'Billing',
-          target: `${planLabel(inv.plan)} · ${Number(inv.amount ?? 0).toLocaleString('vi-VN')}₫`,
+          activity: "Hóa đơn gói",
+          user: "Billing",
+          target: `${planLabel(inv.plan)} · ${Number(inv.amount ?? 0).toLocaleString("vi-VN")}₫`,
           status: mapBobaposInvoiceStatus(inv.status),
           createdAt: (inv.createdAt ?? new Date()).toISOString(),
         })),
       ]
-        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+        )
         .slice(0, 6),
       revenue,
-      health: { api: 'Operational', database: 'BOBAPOS shared', server: 'Stable' },
+      health: {
+        api: "Operational",
+        database: "BOBAPOS shared",
+        server: "Stable",
+      },
     };
   }
 
@@ -231,10 +342,14 @@ export class BobaposBridgeService {
         return mapBobaposPlanToAdmin(plan) === def.value;
       });
       const tenantIds = new Set(planTenants.map((t) => String(t._id)));
-      const planInvoices = invoices.filter((inv) => tenantIds.has(String(inv.tenantId)));
-      const activeOwners = planTenants.filter((t) => mapBobaposTenantStatus(t.status) === 'active').length;
+      const planInvoices = invoices.filter((inv) =>
+        tenantIds.has(String(inv.tenantId)),
+      );
+      const activeOwners = planTenants.filter(
+        (t) => mapBobaposTenantStatus(t.status) === "active",
+      ).length;
       const contractAmount = planInvoices
-        .filter((inv) => inv.status === 'PAID')
+        .filter((inv) => inv.status === "PAID")
         .reduce((sum, inv) => sum + Number(inv.amount ?? 0), 0);
 
       return {
@@ -243,23 +358,28 @@ export class BobaposBridgeService {
         owners: planTenants.length,
         activeOwners,
         stores: planTenants.length,
-        activeContracts: planInvoices.filter((inv) => inv.status === 'PAID').length,
+        activeContracts: planInvoices.filter((inv) => inv.status === "PAID")
+          .length,
         contractAmount,
       };
     });
 
     const contractAmountByPlan: Record<string, number> = {};
-    for (const inv of invoices.filter((i) => i.status === 'PAID')) {
+    for (const inv of invoices.filter((i) => i.status === "PAID")) {
       const key = mapBobaposPlanToAdmin(inv.plan);
-      contractAmountByPlan[key] = (contractAmountByPlan[key] ?? 0) + Number(inv.amount ?? 0);
+      contractAmountByPlan[key] =
+        (contractAmountByPlan[key] ?? 0) + Number(inv.amount ?? 0);
     }
 
     return {
       metrics: [
-        { label: 'Gói đang bán', value: plans.length },
-        { label: 'Chủ cửa hàng', value: tenants.length },
-        { label: 'Cửa hàng', value: tenants.length },
-        { label: 'Hóa đơn đã thanh toán', value: invoices.filter((i) => i.status === 'PAID').length },
+        { label: "Gói đang bán", value: plans.length },
+        { label: "Chủ cửa hàng", value: tenants.length },
+        { label: "Cửa hàng", value: tenants.length },
+        {
+          label: "Hóa đơn đã thanh toán",
+          value: invoices.filter((i) => i.status === "PAID").length,
+        },
       ],
       plans,
       contractAmountByPlan,
@@ -269,12 +389,17 @@ export class BobaposBridgeService {
   async findAllInvoices(params: QueryParams) {
     const page = Number(params.page ?? 1);
     const limit = Number(params.limit ?? 10);
-    const search = String(params.search ?? '').trim().toLowerCase();
+    const search = String(params.search ?? "")
+      .trim()
+      .toLowerCase();
 
     const [invoices, tenants, owners] = await Promise.all([
       this.invoiceModel.find().sort({ createdAt: -1 }).lean().exec(),
       this.tenantModel.find().lean().exec(),
-      this.bobaposUserModel.find({ role: 'ADMIN' }).lean().exec(),
+      this.bobaposUserModel
+        .find({ role: { $in: OWNER_ROLES } })
+        .lean()
+        .exec(),
     ]);
 
     const tenantById = new Map(tenants.map((t) => [String(t._id), t]));
@@ -285,20 +410,22 @@ export class BobaposBridgeService {
     let rows = invoices.map((inv, index) => {
       const tenant = tenantById.get(String(inv.tenantId));
       const owner = ownerByTenant.get(String(inv.tenantId));
-      const code = `BP-${new Date(inv.createdAt ?? Date.now()).getFullYear()}-${String(index + 1).padStart(4, '0')}`;
+      const code = `BP-${new Date(inv.createdAt ?? Date.now()).getFullYear()}-${String(index + 1).padStart(4, "0")}`;
       return {
         id: String(inv._id),
         tenantId: String(inv.tenantId),
         code,
-        ownerName: owner?.fullName ?? tenant?.storeName ?? '—',
+        ownerName: owner?.fullName ?? tenant?.storeName ?? "—",
         plan: mapBobaposPlanToAdmin(inv.plan),
         status: mapBobaposInvoiceStatus(inv.status),
         amount: Number(inv.amount ?? 0),
-        startDate: inv.periodStart ? this.toDateInput(inv.periodStart) : this.toDateInput(inv.createdAt ?? new Date()),
-        endDate: inv.periodEnd ? this.toDateInput(inv.periodEnd) : '',
+        startDate: inv.periodStart
+          ? this.toDateInput(inv.periodStart)
+          : this.toDateInput(inv.createdAt ?? new Date()),
+        endDate: inv.periodEnd ? this.toDateInput(inv.periodEnd) : "",
         durationMonths: 1,
-        additionalTerms: inv.note ?? '',
-        paymentMethod: inv.paymentMethod ?? 'MANUAL',
+        additionalTerms: inv.note ?? "",
+        paymentMethod: inv.paymentMethod ?? "MANUAL",
         createdAt: inv.createdAt,
         updatedAt: inv.updatedAt,
       };
@@ -306,35 +433,52 @@ export class BobaposBridgeService {
 
     if (search) {
       rows = rows.filter((row) =>
-        ['code', 'ownerName', 'plan', 'status'].some((k) =>
-          String(row[k as keyof typeof row] ?? '').toLowerCase().includes(search),
+        ["code", "ownerName", "plan", "status"].some((k) =>
+          String(row[k as keyof typeof row] ?? "")
+            .toLowerCase()
+            .includes(search),
         ),
       );
     }
+
+    const statusFilter = params.filters?.status ?? params.status;
+    if (statusFilter) rows = rows.filter((row) => row.status === statusFilter);
+    const planFilter = params.filters?.plan ?? params.plan;
+    if (planFilter) rows = rows.filter((row) => row.plan === planFilter);
 
     const total = rows.length;
     const skip = (page - 1) * limit;
     return {
       data: rows.slice(skip, skip + limit),
-      meta: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
     };
   }
 
   async findOneInvoice(id: string) {
     const result = await this.findAllInvoices({ page: 1, limit: 10_000 });
     const row = result.data.find((r) => r.id === id);
-    if (!row) throw new NotFoundException('Contract not found');
+    if (!row) throw new NotFoundException("Contract not found");
     return row;
   }
 
   async findAllEmployees(params: QueryParams) {
     const page = Number(params.page ?? 1);
     const limit = Number(params.limit ?? 10);
-    const search = String(params.search ?? '').trim().toLowerCase();
+    const search = String(params.search ?? "")
+      .trim()
+      .toLowerCase();
 
     const [users, tenants] = await Promise.all([
       this.bobaposUserModel
-        .find({ role: { $ne: 'ADMIN' }, tenantId: { $exists: true, $ne: null } })
+        .find({
+          role: { $nin: OWNER_ROLES },
+          tenantId: { $exists: true, $ne: null },
+        })
         .lean()
         .exec(),
       this.tenantModel.find().lean().exec(),
@@ -345,11 +489,11 @@ export class BobaposBridgeService {
     let rows = users.map((u) => ({
       id: String(u._id),
       tenantId: String(u.tenantId),
-      fullName: u.fullName ?? '—',
-      email: u.email ?? '',
+      fullName: u.fullName ?? "—",
+      email: u.email ?? "",
       role: mapBobaposRoleToEmployeeRole(u.role),
-      department: tenantById.get(String(u.tenantId))?.storeName ?? '—',
-      status: u.isActive === false ? 'inactive' : 'active',
+      department: tenantById.get(String(u.tenantId))?.storeName ?? "—",
+      status: u.isActive === false ? "inactive" : "active",
       lastLoginAt: null,
       createdAt: u.createdAt,
       updatedAt: u.updatedAt,
@@ -357,24 +501,36 @@ export class BobaposBridgeService {
 
     if (search) {
       rows = rows.filter((row) =>
-        ['fullName', 'email', 'role', 'department'].some((k) =>
-          String(row[k as keyof typeof row] ?? '').toLowerCase().includes(search),
+        ["fullName", "email", "role", "department"].some((k) =>
+          String(row[k as keyof typeof row] ?? "")
+            .toLowerCase()
+            .includes(search),
         ),
       );
     }
+
+    const statusFilter = params.filters?.status ?? params.status;
+    if (statusFilter) rows = rows.filter((row) => row.status === statusFilter);
+    const roleFilter = params.filters?.role ?? params.role;
+    if (roleFilter) rows = rows.filter((row) => row.role === roleFilter);
 
     const total = rows.length;
     const skip = (page - 1) * limit;
     return {
       data: rows.slice(skip, skip + limit),
-      meta: { page, limit, total, totalPages: Math.max(1, Math.ceil(total / limit)) },
+      meta: {
+        page,
+        limit,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / limit)),
+      },
     };
   }
 
   async findOneEmployee(id: string) {
     const result = await this.findAllEmployees({ page: 1, limit: 10_000 });
     const row = result.data.find((r) => r.id === id);
-    if (!row) throw new NotFoundException('Employee not found');
+    if (!row) throw new NotFoundException("Employee not found");
     return row;
   }
 
@@ -387,7 +543,10 @@ export class BobaposBridgeService {
       return this.bobaposUserModel.findById(tenant.ownerUserId).lean().exec();
     }
     return this.bobaposUserModel
-      .findOne({ tenantId: tenant._id, role: 'ADMIN' })
+      .findOne({
+        tenantId: { $in: [tenant._id, String(tenant._id)] },
+        role: { $in: OWNER_ROLES },
+      })
       .lean()
       .exec();
   }
@@ -397,23 +556,37 @@ export class BobaposBridgeService {
     sub?: BobaposSubscription,
     owner?: BobaposUser,
   ): AdminTenantDto {
-    const plan = mapBobaposPlanToAdmin(sub?.plan ?? tenant.packageType);
+    const rawTenant = tenant as unknown as BobaposTenant &
+      Record<string, unknown>;
+    const rawOwner = owner as
+      | (BobaposUser & Record<string, unknown>)
+      | undefined;
+    const plan = mapBobaposPlanToAdmin(
+      sub?.plan ?? tenant.packageType ?? String(rawTenant.plan ?? ""),
+    );
     const settings = (tenant.settings ?? {}) as Record<string, unknown>;
+    const storeName = tenant.storeName ?? String(rawTenant.name ?? "—");
+    const ownerName = owner?.fullName ?? String(rawTenant.ownerName ?? "—");
+    const ownerEmail = owner?.email ?? String(rawTenant.ownerEmail ?? "—");
+    const ownerPhone =
+      owner?.phone ??
+      String(rawOwner?.phone ?? rawTenant.ownerPhone ?? settings.phone ?? "");
+    const address = String(rawTenant.address ?? settings.address ?? "");
 
     return {
       id: String(tenant._id),
-      name: tenant.storeName ?? '—',
-      slug: tenant.slug ?? '',
-      ownerName: owner?.fullName ?? '—',
-      ownerEmail: owner?.email ?? '—',
-      ownerPhone: owner?.phone ?? String(settings.phone ?? ''),
+      name: storeName,
+      slug: tenant.slug ?? "",
+      ownerName,
+      ownerEmail,
+      ownerPhone,
       plan,
       status: mapBobaposTenantStatus(tenant.status),
-      location: String(settings.address ?? ''),
-      address: String(settings.address ?? ''),
-      taxId: String(settings.taxCode ?? ''),
-      accountRole: 'super_admin',
-      softwareVersion: 'BOBAPOS',
+      location: String(rawTenant.location ?? address),
+      address,
+      taxId: String(rawTenant.taxId ?? settings.taxCode ?? ""),
+      accountRole: "super_admin",
+      softwareVersion: "BOBAPOS",
       contractDurationMonths: 12,
       setupFee: 0,
       monthlyFee: planPriceVnd(sub?.plan ?? tenant.packageType),
@@ -433,8 +606,8 @@ export class BobaposBridgeService {
     const months = Array.from({ length: 12 }, (_, index) => {
       const date = new Date(now.getFullYear(), now.getMonth() - 11 + index, 1);
       return {
-        key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
-        label: date.toLocaleString('vi-VN', { month: 'short' }),
+        key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
+        label: date.toLocaleString("vi-VN", { month: "short" }),
       };
     });
     const startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
@@ -443,10 +616,10 @@ export class BobaposBridgeService {
     for (const t of tenants) {
       const created = t.createdAt ? new Date(t.createdAt) : null;
       if (!created || created < startDate) continue;
-      const key = `${created.getFullYear()}-${String(created.getMonth() + 1).padStart(2, '0')}`;
+      const key = `${created.getFullYear()}-${String(created.getMonth() + 1).padStart(2, "0")}`;
       const cur = byMonth.get(key) ?? { owners: 0, stores: 0 };
       cur.stores += 1;
-      if (mapBobaposTenantStatus(t.status) === 'active') cur.owners += 1;
+      if (mapBobaposTenantStatus(t.status) === "active") cur.owners += 1;
       byMonth.set(key, cur);
     }
 
@@ -461,29 +634,34 @@ export class BobaposBridgeService {
     const months = Array.from({ length: 12 }, (_, index) => {
       const date = new Date(now.getFullYear(), now.getMonth() - 11 + index, 1);
       return {
-        key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`,
-        label: date.toLocaleString('vi-VN', { month: 'short' }),
+        key: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`,
+        label: date.toLocaleString("vi-VN", { month: "short" }),
       };
     });
     const startDate = new Date(now.getFullYear(), now.getMonth() - 11, 1);
     const byMonth = new Map<string, number>();
 
-    for (const inv of invoices.filter((i) => i.status === 'PAID')) {
+    for (const inv of invoices.filter((i) => i.status === "PAID")) {
       const created = inv.createdAt ? new Date(inv.createdAt) : null;
       if (!created || created < startDate) continue;
-      const key = `${created.getFullYear()}-${String(created.getMonth() + 1).padStart(2, '0')}`;
+      const key = `${created.getFullYear()}-${String(created.getMonth() + 1).padStart(2, "0")}`;
       byMonth.set(key, (byMonth.get(key) ?? 0) + Number(inv.amount ?? 0));
     }
 
-    const points = months.map((m) => ({ month: m.label, amount: byMonth.get(m.key) ?? 0 }));
+    const points = months.map((m) => ({
+      month: m.label,
+      amount: byMonth.get(m.key) ?? 0,
+    }));
     const monthlyRevenue = points[points.length - 1]?.amount ?? 0;
     const previousRevenue = points[points.length - 2]?.amount ?? 0;
     const growthRate =
-      previousRevenue > 0 ? ((monthlyRevenue - previousRevenue) / previousRevenue) * 100 : 0;
+      previousRevenue > 0
+        ? ((monthlyRevenue - previousRevenue) / previousRevenue) * 100
+        : 0;
 
     return {
       monthlyRevenue,
-      activeSubscriptions: invoices.filter((i) => i.status === 'PAID').length,
+      activeSubscriptions: invoices.filter((i) => i.status === "PAID").length,
       growthRate,
       points,
     };
@@ -491,5 +669,36 @@ export class BobaposBridgeService {
 
   private toDateInput(date: Date) {
     return new Date(date).toISOString().slice(0, 10);
+  }
+
+  private useInternalApi() {
+    return Boolean(
+      this.config.get<string>("BOBAPOS_INTERNAL_API_URL")?.trim() &&
+      this.config.get<string>("BOBAPOS_INTERNAL_API_SECRET")?.trim(),
+    );
+  }
+
+  private async callInternalApi(
+    path: string,
+    method: "PATCH" | "DELETE",
+    body?: Record<string, unknown>,
+  ) {
+    const baseUrl = this.config
+      .get<string>("BOBAPOS_INTERNAL_API_URL")!
+      .replace(/\/$/, "");
+    const secret = this.config.get<string>("BOBAPOS_INTERNAL_API_SECRET")!;
+    const response = await fetch(`${baseUrl}${path}`, {
+      method,
+      headers: {
+        "Content-Type": "application/json",
+        "x-platform-admin-secret": secret,
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!response.ok) {
+      throw new BadGatewayException(
+        `BOBAPOS internal API returned ${response.status}`,
+      );
+    }
   }
 }
