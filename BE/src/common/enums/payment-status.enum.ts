@@ -1,0 +1,13 @@
+export enum PaymentStatus {
+  NOT_REQUIRED = 'NOT_REQUIRED',
+  PENDING = 'PENDING',
+  PAID = 'PAID',
+}
+
+export enum PaymentMatchStatus {
+  RECEIVED = 'RECEIVED',
+  MATCHED = 'MATCHED',
+  UNMATCHED = 'UNMATCHED',
+  DUPLICATE = 'DUPLICATE',
+  AMOUNT_MISMATCH = 'AMOUNT_MISMATCH',
+}
