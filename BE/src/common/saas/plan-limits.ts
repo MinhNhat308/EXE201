@@ -14,6 +14,9 @@ export const TRIAL_DAYS = 7;
 /** Mỗi lần thanh toán gói (99k / 299k / 599k) = tối đa 30 ngày sử dụng */
 export const SUBSCRIPTION_PERIOD_DAYS = 30;
 
+/** Thời gian tối đa chờ CK / QR cho một hóa đơn billing (phút) */
+export const BILLING_PAYMENT_TIMEOUT_MINUTES = 10;
+
 export const PLAN_PRICING_VND: Record<SubscriptionPlan, number> = {
   [SubscriptionPlan.SOLO]: 99_000,
   [SubscriptionPlan.STANDARD]: 299_000,

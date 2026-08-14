@@ -43,6 +43,10 @@ export class BillingInvoice {
   @Prop()
   paymentQrUrl?: string;
 
+  /** Hết hạn thanh toán — mặc định 10 phút sau khi tạo */
+  @Prop()
+  expiresAt?: Date;
+
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -64,6 +68,7 @@ BillingInvoiceSchema.set('toJSON', {
     note: ret.note,
     paymentCode: ret.paymentCode,
     paymentQrUrl: ret.paymentQrUrl,
+    expiresAt: ret.expiresAt,
     createdAt: ret.createdAt,
     updatedAt: ret.updatedAt,
   }),

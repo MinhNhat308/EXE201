@@ -17,6 +17,7 @@ export type BankTransferInfo = {
   qrUrl: string;
   note: string;
   transferPrefix: string;
+  paymentTimeoutMinutes?: number;
 };
 
 export const BillingController = {
@@ -54,15 +55,6 @@ export const BillingController = {
       method: 'POST',
       auth: true,
       body: JSON.stringify({ plan }),
-    });
-  },
-
-  confirmPaid(invoiceId: string) {
-    invalidateCache('GET:/subscription');
-    invalidateCache('GET:/billing');
-    return apiRequest(`/billing/invoices/${invoiceId}/confirm-paid`, {
-      method: 'POST',
-      auth: true,
     });
   },
 };

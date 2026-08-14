@@ -8,6 +8,7 @@ import { Model, Types } from 'mongoose';
 import { BillingInvoiceStatus } from '../../common/enums/billing-invoice-status.enum';
 import { SubscriptionPlan } from '../../common/enums/subscription-plan.enum';
 import {
+  BILLING_PAYMENT_TIMEOUT_MINUTES,
   PLAN_PRICING_VND,
   SUBSCRIPTION_PERIOD_DAYS,
 } from '../../common/saas/plan-limits';
@@ -18,6 +19,8 @@ import { BillingInvoice, BillingInvoiceDocument } from './schemas/billing-invoic
 
 @Injectable()
 export class BillingService {
+  private readonly paymentTimeoutMs = BILLING_PAYMENT_TIMEOUT_MINUTES * 60_000;
+
   constructor(
     @InjectModel(BillingInvoice.name)
     private readonly invoiceModel: Model<BillingInvoiceDocument>,
@@ -32,6 +35,7 @@ export class BillingService {
       redirectUrl:
         process.env.MOMO_REDIRECT_URL?.trim() ||
         'http://localhost:3000/dashboard/admin/billing/result',
+      paymentTimeoutMinutes: BILLING_PAYMENT_TIMEOUT_MINUTES,
     };
   }
 
@@ -55,10 +59,51 @@ export class BillingService {
       qrUrl: qrPath,
       note,
       transferPrefix: process.env.SAAS_BANK_TRANSFER_PREFIX?.trim() || 'BOBAPOS',
+      paymentTimeoutMinutes: BILLING_PAYMENT_TIMEOUT_MINUTES,
     };
   }
 
+  private async expireStalePendingInvoices(tenantId: string): Promise<void> {
+    const now = new Date();
+    const legacyCutoff = new Date(now.getTime() - this.paymentTimeoutMs);
+
+    await this.invoiceModel
+      .updateMany(
+        {
+          tenantId: new Types.ObjectId(tenantId),
+          status: BillingInvoiceStatus.PENDING,
+          $or: [
+            { expiresAt: { $lt: now } },
+            {
+              expiresAt: { $exists: false },
+              createdAt: { $lt: legacyCutoff },
+            },
+          ],
+        },
+        { status: BillingInvoiceStatus.EXPIRED },
+      )
+      .exec();
+  }
+
+  private async assertCanCreateCheckout(tenantId: string): Promise<void> {
+    await this.expireStalePendingInvoices(tenantId);
+
+    const pending = await this.invoiceModel
+      .findOne({
+        tenantId: new Types.ObjectId(tenantId),
+        status: BillingInvoiceStatus.PENDING,
+      })
+      .exec();
+
+    if (pending) {
+      throw new BadRequestException(
+        `Bạn đã có hóa đơn chờ thanh toán. Quét QR và chuyển khoản trong ${BILLING_PAYMENT_TIMEOUT_MINUTES} phút, hoặc đợi hết hạn rồi tạo hóa đơn mới.`,
+      );
+    }
+  }
+
   async listByTenant(tenantId: string) {
+    await this.expireStalePendingInvoices(tenantId);
     return this.invoiceModel
       .find({ tenantId: new Types.ObjectId(tenantId) })
       .sort({ createdAt: -1 })
@@ -66,6 +111,7 @@ export class BillingService {
   }
 
   async getInvoiceForTenant(tenantId: string, invoiceId: string) {
+    await this.expireStalePendingInvoices(tenantId);
     const invoice = await this.invoiceModel.findById(invoiceId).exec();
     if (!invoice || invoice.tenantId.toString() !== tenantId) {
       throw new NotFoundException('Không tìm thấy hóa đơn');
@@ -82,6 +128,7 @@ export class BillingService {
     const now = new Date();
     const periodEnd = new Date(now);
     periodEnd.setDate(periodEnd.getDate() + SUBSCRIPTION_PERIOD_DAYS);
+    const expiresAt = new Date(now.getTime() + this.paymentTimeoutMs);
 
     return new this.invoiceModel({
       tenantId: new Types.ObjectId(tenantId),
@@ -92,11 +139,13 @@ export class BillingService {
       paymentMethod,
       periodStart: now,
       periodEnd,
+      expiresAt,
       note: `Gói ${SUBSCRIPTION_PERIOD_DAYS} ngày — ${plan}`,
     }).save();
   }
 
   async createCheckout(tenantId: string, plan: SubscriptionPlan) {
+    await this.assertCanCreateCheckout(tenantId);
     const invoice = await this.createPendingInvoice(
       tenantId,
       plan,
@@ -112,6 +161,7 @@ export class BillingService {
       );
     }
 
+    await this.assertCanCreateCheckout(tenantId);
     const invoice = await this.createPendingInvoice(tenantId, plan, 'MOMO');
     const orderId = invoice._id.toString();
 
@@ -132,13 +182,23 @@ export class BillingService {
     };
   }
 
-  /** Kích hoạt sau thanh toán (manual / MoMo IPN) */
+  /** Kích hoạt sau thanh toán tự động (SePay / MoMo IPN) */
   async markPaidAndActivate(invoiceId: string) {
     const invoice = await this.invoiceModel.findById(invoiceId).exec();
     if (!invoice) throw new NotFoundException('Không tìm thấy hóa đơn');
 
     if (invoice.status === BillingInvoiceStatus.PAID) {
       return invoice;
+    }
+
+    if (invoice.status !== BillingInvoiceStatus.PENDING) {
+      throw new BadRequestException('Hóa đơn không còn hiệu lực thanh toán');
+    }
+
+    if (invoice.expiresAt && invoice.expiresAt.getTime() < Date.now()) {
+      invoice.status = BillingInvoiceStatus.EXPIRED;
+      await invoice.save();
+      throw new BadRequestException('Hóa đơn đã hết hạn thanh toán (10 phút)');
     }
 
     invoice.status = BillingInvoiceStatus.PAID;

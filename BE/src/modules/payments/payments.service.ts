@@ -218,6 +218,23 @@ export class PaymentsService {
       .exec();
 
     if (invoice) {
+      const expiredAt = invoice.expiresAt
+        ? invoice.expiresAt.getTime()
+        : invoice.createdAt
+          ? new Date(invoice.createdAt).getTime() + 10 * 60_000
+          : 0;
+
+      if (expiredAt > 0 && expiredAt < Date.now()) {
+        invoice.status = BillingInvoiceStatus.EXPIRED;
+        await invoice.save();
+        tx.matchStatus = PaymentMatchStatus.UNMATCHED;
+        await tx.save();
+        this.log.warn(
+          `SePay late payment after expiry invoice=${invoice._id} code=${paymentCode}`,
+        );
+        return { success: true };
+      }
+
       if (Math.round(invoice.amount) !== Math.round(payload.transferAmount)) {
         tx.matchStatus = PaymentMatchStatus.AMOUNT_MISMATCH;
         tx.matchedInvoiceId = invoice._id;

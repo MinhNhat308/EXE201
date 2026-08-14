@@ -79,5 +79,6 @@ export interface BillingInvoice {
   paymentMethod: string;
   paymentCode?: string;
   paymentQrUrl?: string;
+  expiresAt?: string;
   createdAt?: string;
 }

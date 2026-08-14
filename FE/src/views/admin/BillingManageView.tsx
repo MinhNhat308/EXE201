@@ -26,6 +26,32 @@ const PLAN_PRICE: Record<SubscriptionPlan, number> = {
 };
 
 const SUBSCRIPTION_PERIOD_DAYS = 30;
+const PAYMENT_TIMEOUT_MINUTES = 10;
+
+function getInvoiceExpiresAt(inv: BillingInvoice): Date {
+  if (inv.expiresAt) return new Date(inv.expiresAt);
+  if (inv.createdAt) {
+    return new Date(new Date(inv.createdAt).getTime() + PAYMENT_TIMEOUT_MINUTES * 60_000);
+  }
+  return new Date(0);
+}
+
+function isPendingActive(inv: BillingInvoice): boolean {
+  return inv.status === 'PENDING' && getInvoiceExpiresAt(inv).getTime() > Date.now();
+}
+
+function invoiceStatusLabel(status: string): string {
+  switch (status) {
+    case 'PAID':
+      return 'Đã thanh toán';
+    case 'EXPIRED':
+      return 'Hết hạn';
+    case 'PENDING':
+      return 'Chờ thanh toán';
+    default:
+      return status;
+  }
+}
 
 export function BillingManageView({ variant = 'admin' }: { variant?: 'admin' | 'solo' }) {
   const [invoices, setInvoices] = useState<BillingInvoice[]>([]);
@@ -40,6 +66,8 @@ export function BillingManageView({ variant = 'admin' }: { variant?: 'admin' | '
   const [lastInvoiceId, setLastInvoiceId] = useState<string | null>(null);
   const [momoEnabled, setMomoEnabled] = useState(false);
   const [bankInfo, setBankInfo] = useState<BankTransferInfo | null>(null);
+  const [paySecondsLeft, setPaySecondsLeft] = useState(0);
+  const paymentTimeoutMinutes = bankInfo?.paymentTimeoutMinutes ?? PAYMENT_TIMEOUT_MINUTES;
 
   const load = async () => {
     setLoading(true);
@@ -118,32 +146,44 @@ export function BillingManageView({ variant = 'admin' }: { variant?: 'admin' | '
     }
   };
 
-  const handleConfirmPaid = async (id: string) => {
-    setBusy(true);
-    setMessage('');
-    try {
-      await BillingController.confirmPaid(id);
-      setMessage('Đã xác nhận thanh toán — gói BOBAPOS được kích hoạt. Bạn có thể vận hành bình thường.');
-      setLastInvoiceId(null);
-      await load();
-    } catch (err) {
-      setMessage(err instanceof Error ? err.message : 'Xác nhận thất bại');
-    } finally {
-      setBusy(false);
-    }
-  };
+  const activePendingInvoice = invoices.find(isPendingActive);
+  const pendingInvoice =
+    lastInvoiceId && invoices.find((i) => i.id === lastInvoiceId && isPendingActive(i))
+      ? invoices.find((i) => i.id === lastInvoiceId && isPendingActive(i))
+      : activePendingInvoice;
 
-  const pendingInvoice = lastInvoiceId
-    ? invoices.find((i) => i.id === lastInvoiceId)
-    : invoices.find((i) => i.status === 'PENDING');
+  useEffect(() => {
+    if (!pendingInvoice) {
+      setPaySecondsLeft(0);
+      return;
+    }
+    const tick = () => {
+      const left = Math.max(
+        0,
+        Math.floor((getInvoiceExpiresAt(pendingInvoice).getTime() - Date.now()) / 1000),
+      );
+      setPaySecondsLeft(left);
+      if (left === 0) {
+        void load();
+      }
+    };
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [pendingInvoice?.id, pendingInvoice?.expiresAt, pendingInvoice?.createdAt]);
 
   usePolling(
     async () => {
-      if (!pendingInvoice || pendingInvoice.status !== 'PENDING') return;
+      if (!pendingInvoice || !isPendingActive(pendingInvoice)) return;
       try {
         const fresh = await BillingController.getInvoice(pendingInvoice.id);
         if (fresh.status === 'PAID') {
           setMessage('SePay đã xác nhận thanh toán — gói được kích hoạt tự động.');
+          setLastInvoiceId(null);
+          await load();
+        } else if (fresh.status === 'EXPIRED') {
+          setMessage('Hóa đơn đã hết hạn. Bạn có thể tạo hóa đơn mới.');
+          setLastInvoiceId(null);
           await load();
         }
       } catch {
@@ -151,8 +191,12 @@ export function BillingManageView({ variant = 'admin' }: { variant?: 'admin' | '
       }
     },
     5000,
-    Boolean(pendingInvoice && pendingInvoice.status === 'PENDING'),
+    Boolean(pendingInvoice && isPendingActive(pendingInvoice)),
   );
+
+  const payMinutesLeft = Math.floor(paySecondsLeft / 60);
+  const paySecondsRemainder = paySecondsLeft % 60;
+  const hasActivePending = Boolean(activePendingInvoice);
 
   const body = (
     <>
@@ -222,12 +266,12 @@ export function BillingManageView({ variant = 'admin' }: { variant?: 'admin' | '
           {
             n: '2',
             t: 'Tạo hóa đơn & quét QR',
-            d: 'Quét mã QR VietQR hoặc chuyển khoản theo nội dung hóa đơn.',
+            d: `Mỗi lần chỉ 1 hóa đơn — thanh toán trong ${paymentTimeoutMinutes} phút.`,
           },
           {
             n: '3',
-            t: 'Thanh toán → kích hoạt',
-            d: 'SePay tự xác nhận — gói ACTIVE trong 30 ngày.',
+            t: 'SePay xác nhận',
+            d: 'Chuyển khoản đúng số tiền + nội dung → gói ACTIVE tự động.',
           },
         ].map((s) => (
           <div key={s.n} className="rounded-2xl border bg-white p-4 shadow-sm">
@@ -243,6 +287,25 @@ export function BillingManageView({ variant = 'admin' }: { variant?: 'admin' | '
       {/* Tạo hóa đơn */}
       <div className="mt-8 rounded-2xl border bg-white p-6 shadow-sm">
         <h2 className="font-bold text-stone-900">Tạo hóa đơn gia hạn</h2>
+        <p className="mt-1 text-xs text-stone-500">
+          Quy tắc: tối đa <strong>1 hóa đơn chờ</strong> · thanh toán trong{' '}
+          <strong>{paymentTimeoutMinutes} phút</strong> · hết hạn tự tạo mới.
+        </p>
+        {hasActivePending && (
+          <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            Bạn đang có hóa đơn chờ thanh toán
+            {paySecondsLeft > 0 && (
+              <>
+                {' '}
+                — còn{' '}
+                <strong>
+                  {payMinutesLeft}:{String(paySecondsRemainder).padStart(2, '0')}
+                </strong>
+              </>
+            )}
+            . Hoàn tất CK hoặc đợi hết hạn rồi tạo hóa đơn mới.
+          </p>
+        )}
         <div className="mt-4 flex flex-wrap items-end gap-4">
           <div>
             <label className="mb-1 block text-xs font-semibold text-stone-500">Gói BOBAPOS</label>
@@ -273,18 +336,18 @@ export function BillingManageView({ variant = 'admin' }: { variant?: 'admin' | '
           </div>
           <button
             type="button"
-            disabled={busy}
+            disabled={busy || hasActivePending}
             onClick={handleCheckout}
-            className={`rounded-xl px-6 py-2.5 text-sm font-bold text-white shadow-md ${BRAND.primary}`}
+            className={`rounded-xl px-6 py-2.5 text-sm font-bold text-white shadow-md disabled:cursor-not-allowed disabled:opacity-50 ${BRAND.primary}`}
           >
-            {busy ? 'Đang tạo...' : 'Tạo hóa đơn & hiện QR'}
+            {busy ? 'Đang tạo...' : hasActivePending ? 'Đang có hóa đơn chờ' : 'Tạo hóa đơn & hiện QR'}
           </button>
           {momoEnabled && (
             <button
               type="button"
-              disabled={busy}
+              disabled={busy || hasActivePending}
               onClick={handleMomoPay}
-              className="rounded-xl bg-[#A50064] px-6 py-2.5 text-sm font-bold text-white shadow-md shadow-pink-200/50 transition hover:bg-[#8e0056] disabled:opacity-60"
+              className="rounded-xl bg-[#A50064] px-6 py-2.5 text-sm font-bold text-white shadow-md shadow-pink-200/50 transition hover:bg-[#8e0056] disabled:cursor-not-allowed disabled:opacity-60"
             >
               {busy ? 'Đang mở MoMo...' : 'Hoặc: MoMo'}
             </button>
@@ -307,6 +370,16 @@ export function BillingManageView({ variant = 'admin' }: { variant?: 'admin' | '
             Hóa đơn <strong>{pendingInvoice.id.slice(-8).toUpperCase()}</strong> ·{' '}
             <strong>{pendingInvoice.amount.toLocaleString('vi-VN')}đ</strong> · Gói{' '}
             {segmentLabel(pendingInvoice.plan)}
+            {paySecondsLeft > 0 && (
+              <>
+                {' '}
+                · Còn{' '}
+                <strong className="text-amber-700">
+                  {payMinutesLeft}:{String(paySecondsRemainder).padStart(2, '0')}
+                </strong>{' '}
+                để thanh toán
+              </>
+            )}
           </p>
           <div className="mt-4 flex flex-col gap-6 sm:flex-row sm:items-start">
             <div className="shrink-0 rounded-2xl border bg-white p-3 shadow-sm">
@@ -358,23 +431,10 @@ export function BillingManageView({ variant = 'admin' }: { variant?: 'admin' | '
             </div>
             </dl>
           </div>
-          {bankInfo.note && (
-            <p className="mt-3 text-xs text-stone-500">{bankInfo.note}</p>
-          )}
           <p className="mt-4 text-xs text-stone-500">
-            SePay tự xác nhận khi tiền vào (webhook). Hoặc bấm{' '}
-            <strong>Xác nhận đã thanh toán</strong> nếu cần kích hoạt thủ công.
+            SePay tự xác nhận khi tiền vào đúng số tiền và nội dung{' '}
+            <strong>{pendingInvoice.paymentCode}</strong>. Không cần thao tác thủ công.
           </p>
-          {pendingInvoice.status === 'PENDING' && (
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => handleConfirmPaid(pendingInvoice.id)}
-              className={`mt-4 rounded-xl px-5 py-2.5 text-sm font-bold text-white ${BRAND.primary}`}
-            >
-              Xác nhận đã thanh toán (demo)
-            </button>
-          )}
         </div>
       )}
 
@@ -400,7 +460,6 @@ export function BillingManageView({ variant = 'admin' }: { variant?: 'admin' | '
                   <th className="px-4 py-3">Số tiền</th>
                   <th className="px-4 py-3">Trạng thái</th>
                   <th className="px-4 py-3">Ngày</th>
-                  <th className="px-4 py-3" />
                 </tr>
               </thead>
               <tbody>
@@ -418,28 +477,18 @@ export function BillingManageView({ variant = 'admin' }: { variant?: 'admin' | '
                         className={`rounded-full px-2 py-0.5 text-xs font-semibold ${
                           inv.status === 'PAID'
                             ? 'bg-emerald-100 text-emerald-700'
-                            : 'bg-amber-100 text-amber-800'
+                            : inv.status === 'EXPIRED'
+                              ? 'bg-stone-200 text-stone-600'
+                              : 'bg-amber-100 text-amber-800'
                         }`}
                       >
-                        {inv.status === 'PAID' ? 'Đã thanh toán' : 'Chờ thanh toán'}
+                        {invoiceStatusLabel(inv.status)}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-stone-500">
                       {inv.createdAt
                         ? new Date(inv.createdAt).toLocaleDateString('vi-VN')
                         : '—'}
-                    </td>
-                    <td className="px-4 py-3">
-                      {inv.status === 'PENDING' && (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => handleConfirmPaid(inv.id)}
-                          className={`rounded-lg px-3 py-1 text-xs font-semibold text-white ${BRAND.primary}`}
-                        >
-                          Xác nhận đã TT
-                        </button>
-                      )}
                     </td>
                   </tr>
                 ))}

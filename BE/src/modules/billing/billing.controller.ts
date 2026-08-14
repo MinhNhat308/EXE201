@@ -57,11 +57,6 @@ export class BillingController {
       plan,
     );
   }
-
-  @Post('invoices/:id/confirm-paid')
-  confirmPaid(@Param('id') id: string) {
-    return this.billingService.markPaidAndActivate(id);
-  }
 }
 
 /** Webhook MoMo — public, không JWT */
