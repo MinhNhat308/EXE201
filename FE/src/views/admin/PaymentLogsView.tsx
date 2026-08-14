@@ -43,8 +43,9 @@ export function PaymentLogsView() {
   }, []);
 
   return (
-    <AdminLayout title="Log thanh toán SePay">
+    <AdminLayout>
       <div className="space-y-4">
+        <h1 className="text-2xl font-bold">Log thanh toán SePay</h1>
         <p className="text-sm text-stone-500">
           Mọi giao dịch SePay gửi về webhook đều được lưu tại đây. Đơn CK khớp tự động khi nội dung
           chứa mã <strong>BOBAPOS…</strong>
