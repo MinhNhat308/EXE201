@@ -22,6 +22,7 @@ export function hydrateAuthFromServer(): Promise<User | null> {
           tenant: object;
           subscription: object;
           trialDaysLeft: number;
+          daysLeft: number;
           plan: string;
           status: string;
         }>('/auth/session', { auth: true, skipCache: true }),
@@ -31,6 +32,7 @@ export function hydrateAuthFromServer(): Promise<User | null> {
         tenant: session.tenant,
         subscription: session.subscription,
         trialDaysLeft: session.trialDaysLeft,
+        daysLeft: session.daysLeft,
         plan: session.plan,
         status: session.status,
       });

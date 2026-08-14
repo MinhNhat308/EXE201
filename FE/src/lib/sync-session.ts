@@ -29,6 +29,7 @@ export async function syncSessionFromServer(force = false): Promise<boolean> {
         tenant: session.tenant,
         subscription: session.subscription,
         trialDaysLeft: session.trialDaysLeft,
+        daysLeft: session.daysLeft,
         plan: session.plan,
         status: session.status,
       });

@@ -18,6 +18,7 @@ export const AuthController = {
       tenant: response.tenant,
       subscription: response.subscription,
       trialDaysLeft: response.trialDaysLeft,
+      daysLeft: response.daysLeft,
       plan: response.plan,
       status: response.status,
     });

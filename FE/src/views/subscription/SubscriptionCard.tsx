@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { BRAND } from '@/lib/brand';
+import { getBillingPath } from '@/lib/workspace-routes';
 import { SubscriptionController } from '@/controllers/subscription.controller';
 
 export function SubscriptionCard() {
@@ -50,10 +51,10 @@ export function SubscriptionCard() {
           )}
         </div>
         <Link
-          href="/dashboard/admin/subscription"
+          href={getBillingPath()}
           className={`rounded-lg px-3 py-1.5 text-xs font-semibold text-white ${BRAND.primary}`}
         >
-          Quản lý gói
+          Gia hạn gói
         </Link>
       </div>
     </div>

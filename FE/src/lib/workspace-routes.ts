@@ -8,6 +8,8 @@ export const SOLO_HUB_PATH = '/dashboard/solo';
 export const SOLO_POS_PATH = '/dashboard/solo/pos';
 export const SOLO_SALES_PATH = '/dashboard/solo/sales';
 export const SOLO_SETTINGS_PATH = '/dashboard/solo/settings';
+export const SOLO_BILLING_PATH = '/dashboard/solo/billing';
+export const ADMIN_BILLING_PATH = '/dashboard/admin/billing';
 
 export const STORE_CHECK_IN_PATH = '/dashboard/check-in';
 export const STORE_STAFF_HUB_PATH = '/dashboard/staff/hub';
@@ -42,6 +44,12 @@ export function resolveOperatingPlan(
   if (pl === SubscriptionPlan.SOLO || pl === 'SOLO') return SubscriptionPlan.SOLO;
   if (pl === SubscriptionPlan.PREMIUM || pl === 'PREMIUM') return SubscriptionPlan.PREMIUM;
   return SubscriptionPlan.STANDARD;
+}
+
+/** Trang thanh toán / gia hạn theo gói vận hành (Solo vs Store admin) */
+export function getBillingPath(tenant?: TenantInfo | null): string {
+  const resolved = tenant ?? getStoredTenant<TenantInfo>();
+  return isSoloOperatingPlan(resolved) ? SOLO_BILLING_PATH : ADMIN_BILLING_PATH;
 }
 
 export function isSoloOperatingPlan(

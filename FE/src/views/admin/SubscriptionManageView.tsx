@@ -43,6 +43,7 @@ export function SubscriptionManageView() {
           tenant: res.tenant,
           subscription: res.subscription,
           trialDaysLeft: res.trialDaysLeft,
+          daysLeft: res.daysLeft,
           plan: res.subscription.plan,
           status: res.subscription.status,
         });

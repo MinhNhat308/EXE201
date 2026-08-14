@@ -48,6 +48,8 @@ export interface AuthResponse {
 
   trialDaysLeft: number;
 
+  daysLeft: number;
+
   plan: string;
 
   status: string;
@@ -227,6 +229,8 @@ export class AuthService {
       subscription: sub.toJSON() as Record<string, unknown>,
 
       trialDaysLeft,
+
+      daysLeft: this.subscriptionsService.daysLeft(sub),
 
       plan: sub.plan,
 

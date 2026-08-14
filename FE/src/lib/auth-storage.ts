@@ -10,6 +10,8 @@ const SUBSCRIPTION_KEY = 'auth_subscription';
 
 const TRIAL_DAYS_KEY = 'auth_trial_days';
 
+const DAYS_LEFT_KEY = 'auth_days_left';
+
 const PLAN_KEY = 'auth_plan';
 
 const STATUS_KEY = 'auth_status';
@@ -29,6 +31,8 @@ export function saveAuth(
     subscription?: object;
 
     trialDaysLeft?: number;
+
+    daysLeft?: number;
 
     plan?: string;
 
@@ -59,6 +63,12 @@ export function saveAuth(
   if (extras?.trialDaysLeft != null) {
 
     localStorage.setItem(TRIAL_DAYS_KEY, String(extras.trialDaysLeft));
+
+  }
+
+  if (extras?.daysLeft != null) {
+
+    localStorage.setItem(DAYS_LEFT_KEY, String(extras.daysLeft));
 
   }
 
@@ -187,6 +197,27 @@ export function getTrialDaysLeft(): number {
 
 
 
+export function getDaysLeft(): number {
+
+  if (typeof window === 'undefined') return 0;
+
+  return parseInt(localStorage.getItem(DAYS_LEFT_KEY) ?? '0', 10) || 0;
+
+}
+
+
+
+/** Số ngày còn lại theo trạng thái hiện tại (trial hoặc gói đã trả) */
+export function getSubscriptionDaysLeft(): number {
+
+  if (getSubscriptionStatus() === 'TRIAL') return getTrialDaysLeft();
+
+  return getDaysLeft();
+
+}
+
+
+
 export function getSubscriptionStatus(): string | null {
 
   if (typeof window === 'undefined') return null;
@@ -228,6 +259,8 @@ export function clearAuth() {
   localStorage.removeItem(SUBSCRIPTION_KEY);
 
   localStorage.removeItem(TRIAL_DAYS_KEY);
+
+  localStorage.removeItem(DAYS_LEFT_KEY);
 
   localStorage.removeItem(PLAN_KEY);
 

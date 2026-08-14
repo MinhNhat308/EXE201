@@ -6,14 +6,17 @@ import { useEffect, useState } from 'react';
 import { BillingController, BankTransferInfo } from '@/controllers/billing.controller';
 import { usePolling } from '@/lib/use-polling';
 import { SubscriptionController } from '@/controllers/subscription.controller';
+import { getStoredUser, getToken, saveAuth } from '@/lib/auth-storage';
 import { BRAND } from '@/lib/brand';
 import { SEGMENTS, segmentLabel } from '@/lib/segments';
+import { SOLO_HUB_PATH } from '@/lib/workspace-routes';
 import {
   BillingInvoice,
   SubscriptionPlan,
   SubscriptionStatus,
   TenantInfo,
 } from '@/models/tenant.model';
+import { SoloShellLayout } from '@/views/solo/SoloShellLayout';
 import { AdminLayout } from './AdminLayout';
 
 const PLAN_PRICE: Record<SubscriptionPlan, number> = {
@@ -24,11 +27,12 @@ const PLAN_PRICE: Record<SubscriptionPlan, number> = {
 
 const SUBSCRIPTION_PERIOD_DAYS = 30;
 
-export function BillingManageView() {
+export function BillingManageView({ variant = 'admin' }: { variant?: 'admin' | 'solo' }) {
   const [invoices, setInvoices] = useState<BillingInvoice[]>([]);
   const [tenant, setTenant] = useState<TenantInfo | null>(null);
   const [status, setStatus] = useState<SubscriptionStatus | null>(null);
   const [trialDaysLeft, setTrialDaysLeft] = useState(0);
+  const [daysLeft, setDaysLeft] = useState(0);
   const [checkoutPlan, setCheckoutPlan] = useState<SubscriptionPlan>(SubscriptionPlan.STANDARD);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -50,10 +54,24 @@ export function BillingManageView() {
       setTenant(subData.tenant);
       setStatus(subData.subscription.status);
       setTrialDaysLeft(subData.trialDaysLeft);
+      setDaysLeft(subData.daysLeft);
       setMomoEnabled(momo.enabled);
       setBankInfo(bank);
       const intended = subData.tenant.intendedPlan ?? subData.subscription.plan;
-      setCheckoutPlan(intended);
+      setCheckoutPlan(variant === 'solo' ? SubscriptionPlan.SOLO : intended);
+
+      const token = getToken();
+      const user = getStoredUser();
+      if (token && user) {
+        saveAuth(token, user, {
+          tenant: subData.tenant,
+          subscription: subData.subscription,
+          trialDaysLeft: subData.trialDaysLeft,
+          daysLeft: subData.daysLeft,
+          plan: subData.subscription.plan,
+          status: subData.subscription.status,
+        });
+      }
     } catch {
       setMessage('Không tải được thông tin thanh toán');
     } finally {
@@ -136,8 +154,8 @@ export function BillingManageView() {
     Boolean(pendingInvoice && pendingInvoice.status === 'PENDING'),
   );
 
-  return (
-    <AdminLayout>
+  const body = (
+    <>
       <h1 className="text-2xl font-bold">Thanh toán & gia hạn gói</h1>
       <p className="mt-1 text-stone-500">
         Trial 7 ngày miễn phí → sau đó thanh toán tại đây để tiếp tục dùng BOBAPOS
@@ -170,9 +188,18 @@ export function BillingManageView() {
           )}
           {status === SubscriptionStatus.ACTIVE && (
             <>
-              <p className="font-bold text-emerald-800">Gói đang hoạt động</p>
+              <p className="font-bold text-emerald-800">
+                Gói đang hoạt động — còn{' '}
+                <span className="text-emerald-700">{daysLeft} ngày</span>
+              </p>
               <p className="mt-1 text-sm text-stone-600">
-                Có thể tạo hóa đơn gia hạn thêm tháng bất cứ lúc nào.
+                Có thể tạo hóa đơn gia hạn thêm {SUBSCRIPTION_PERIOD_DAYS} ngày bất cứ lúc nào.
+                {daysLeft <= 7 && (
+                  <>
+                    {' '}
+                    <strong className="text-amber-800">Gói sắp hết hạn — nên gia hạn sớm.</strong>
+                  </>
+                )}
               </p>
             </>
           )}
@@ -222,7 +249,8 @@ export function BillingManageView() {
             <select
               value={checkoutPlan}
               onChange={(e) => setCheckoutPlan(e.target.value as SubscriptionPlan)}
-              className="rounded-xl border border-stone-200 px-3 py-2.5 text-sm"
+              disabled={variant === 'solo'}
+              className="rounded-xl border border-stone-200 px-3 py-2.5 text-sm disabled:bg-stone-50 disabled:text-stone-600"
             >
               {SEGMENTS.map((seg) => (
                 <option key={seg.plan} value={seg.plan}>
@@ -421,11 +449,29 @@ export function BillingManageView() {
         )}
       </div>
 
-      <p className="mt-6 text-sm text-stone-500">
-        <Link href="/dashboard/admin/subscription" className={BRAND.primaryText}>
-          ← Quản lý gói đăng ký
-        </Link>
-      </p>
-    </AdminLayout>
+      {variant === 'admin' ? (
+        <p className="mt-6 text-sm text-stone-500">
+          <Link href="/dashboard/admin/subscription" className={BRAND.primaryText}>
+            ← Quản lý gói đăng ký
+          </Link>
+        </p>
+      ) : (
+        <p className="mt-6 text-sm text-stone-500">
+          <Link href={SOLO_HUB_PATH} className={BRAND.primaryText}>
+            ← Về trang chủ Solo
+          </Link>
+        </p>
+      )}
+    </>
   );
+
+  if (variant === 'solo') {
+    return (
+      <SoloShellLayout title="Gói & gia hạn" backHref={SOLO_HUB_PATH}>
+        <div className="mx-auto max-w-3xl px-4 py-8 sm:px-6">{body}</div>
+      </SoloShellLayout>
+    );
+  }
+
+  return <AdminLayout>{body}</AdminLayout>;
 }

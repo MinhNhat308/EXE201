@@ -80,6 +80,8 @@ export interface AuthResponse {
 
   trialDaysLeft: number;
 
+  daysLeft?: number;
+
   plan: string;
 
   status: string;

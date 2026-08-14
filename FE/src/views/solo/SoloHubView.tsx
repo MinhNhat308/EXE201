@@ -1,18 +1,23 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { OrderController } from '@/controllers/order.controller';
-import { getStoredTenant, getStoredUser } from '@/lib/auth-storage';
+import { getStoredTenant, getStoredUser, getSubscriptionDaysLeft, getSubscriptionStatus } from '@/lib/auth-storage';
+import { BRAND } from '@/lib/brand';
+import { syncSessionFromServer } from '@/lib/sync-session';
 import { HubActionCard, HubStatStrip } from '@/views/components/app-ui';
 import { isSoloOperatingPlan } from '@/lib/workspace-routes';
 import {
+  SOLO_BILLING_PATH,
+  SOLO_HUB_PATH,
   SOLO_POS_PATH,
   SOLO_SALES_PATH,
   SOLO_SETTINGS_PATH,
 } from '@/lib/workspace-routes';
 import { normalizeStatus, OrderStatus } from '@/models/order.model';
-import { TenantInfo } from '@/models/tenant.model';
+import { SubscriptionStatus, TenantInfo } from '@/models/tenant.model';
 import { Role, User } from '@/models/user.model';
 import { SoloShellLayout } from './SoloShellLayout';
 
@@ -26,6 +31,8 @@ export function SoloHubView() {
   const [tenant, setTenant] = useState<TenantInfo | null>(null);
   const [stats, setStats] = useState<TodayStats>({ orderCount: 0, revenue: 0 });
   const [loading, setLoading] = useState(true);
+  const [subStatus, setSubStatus] = useState<string | null>(null);
+  const [subDaysLeft, setSubDaysLeft] = useState(0);
 
   const loadStats = useCallback(async (skipCache = false) => {
     try {
@@ -56,8 +63,20 @@ export function SoloHubView() {
       return;
     }
     setTenant(t);
+    void syncSessionFromServer(true).then(() => {
+      setSubStatus(getSubscriptionStatus());
+      setSubDaysLeft(getSubscriptionDaysLeft());
+    });
     void loadStats(true);
   }, [router, loadStats]);
+
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      setSubStatus(getSubscriptionStatus());
+      setSubDaysLeft(getSubscriptionDaysLeft());
+    }, 30_000);
+    return () => window.clearInterval(id);
+  }, []);
 
   const storeName = tenant?.storeName ?? 'cửa hàng';
 
@@ -77,6 +96,13 @@ export function SoloHubView() {
       accent: 'border-emerald-200 bg-gradient-to-br from-emerald-50 to-white',
     },
     {
+      href: SOLO_BILLING_PATH,
+      emoji: '💳',
+      title: 'Gói & gia hạn',
+      desc: 'Xem trạng thái gói BOBAPOS Solo, thanh toán và gia hạn 30 ngày',
+      accent: 'border-violet-200 bg-gradient-to-br from-violet-50 to-white',
+    },
+    {
       href: SOLO_SETTINGS_PATH,
       emoji: '⚙️',
       title: 'Cài đặt',
@@ -84,6 +110,20 @@ export function SoloHubView() {
       accent: 'border-stone-200 bg-white',
     },
   ];
+
+  const subLabel =
+    subStatus === SubscriptionStatus.TRIAL
+      ? `Dùng thử Premium — còn ${subDaysLeft} ngày`
+      : subStatus === SubscriptionStatus.ACTIVE
+        ? `Gói đang hoạt động — còn ${subDaysLeft} ngày`
+        : subStatus === SubscriptionStatus.EXPIRED
+          ? 'Gói đã hết hạn — cần gia hạn để bán tiếp'
+          : null;
+
+  const subUrgent =
+    subStatus === SubscriptionStatus.EXPIRED ||
+    (subDaysLeft > 0 && subDaysLeft <= 7 &&
+      (subStatus === SubscriptionStatus.ACTIVE || subStatus === SubscriptionStatus.TRIAL));
 
   return (
     <SoloShellLayout>
@@ -99,6 +139,26 @@ export function SoloHubView() {
         <div className={`mt-8 ${loading ? 'animate-pulse' : ''}`}>
           <HubStatStrip loading={loading} orderCount={stats.orderCount} revenue={stats.revenue} />
         </div>
+
+        {subLabel && (
+          <div
+            className={`mt-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border px-4 py-3 text-sm ${
+              subUrgent
+                ? 'border-amber-200 bg-amber-50 text-amber-950'
+                : 'border-emerald-200 bg-emerald-50 text-emerald-950'
+            }`}
+          >
+            <span>{subLabel}</span>
+            <Link
+              href={SOLO_BILLING_PATH}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold ${
+                subUrgent ? `text-white ${BRAND.primary}` : 'border border-emerald-300 bg-white'
+              }`}
+            >
+              {subStatus === SubscriptionStatus.EXPIRED ? 'Gia hạn ngay' : 'Xem gói & gia hạn'}
+            </Link>
+          </div>
+        )}
 
         <div className="mt-8 grid gap-4">
           {cards.map((card) => (

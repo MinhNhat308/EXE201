@@ -1,6 +1,7 @@
 'use client';
 
 import { ChangeEvent, FormEvent, useCallback, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ApiError } from '@/lib/api';
 import {
@@ -12,10 +13,15 @@ import {
 } from '@/controllers/admin.controller';
 import { AuthController } from '@/controllers/auth.controller';
 import { InventoryController } from '@/controllers/inventory.controller';
-import { getStoredTenant, updateStoredTenant } from '@/lib/auth-storage';
+import {
+  getStoredTenant,
+  getSubscriptionDaysLeft,
+  getSubscriptionStatus,
+  updateStoredTenant,
+} from '@/lib/auth-storage';
 import { BRAND } from '@/lib/brand';
 import { formatCurrency } from '@/lib/format';
-import { SOLO_HUB_PATH } from '@/lib/workspace-routes';
+import { SOLO_BILLING_PATH, SOLO_HUB_PATH } from '@/lib/workspace-routes';
 import {
   DEFAULT_ICE_LEVELS,
   DEFAULT_SUGAR_LEVELS,
@@ -25,7 +31,7 @@ import { Recipe, StockItem } from '@/models/inventory.model';
 import { Ingredient } from '@/models/inventory.model';
 import { IngredientCategory, INGREDIENT_CATEGORY_LABELS } from '@/models/ingredient-category.model';
 import { MenuItem } from '@/models/menu.model';
-import { TenantInfo } from '@/models/tenant.model';
+import { SubscriptionStatus, TenantInfo } from '@/models/tenant.model';
 import { SoloShellLayout } from './SoloShellLayout';
 
 type SettingsTab = 'menu' | 'toppings' | 'recipes' | 'stock' | 'levels' | 'shop';
@@ -1320,6 +1326,47 @@ function LevelEditor({
   );
 }
 
+function SoloSubscriptionSection() {
+  const [status, setStatus] = useState<string | null>(null);
+  const [daysLeft, setDaysLeft] = useState(0);
+
+  useEffect(() => {
+    const apply = () => {
+      setStatus(getSubscriptionStatus());
+      setDaysLeft(getSubscriptionDaysLeft());
+    };
+    apply();
+    const id = window.setInterval(apply, 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+
+  const label =
+    status === SubscriptionStatus.TRIAL
+      ? `Dùng thử Premium — còn ${daysLeft} ngày`
+      : status === SubscriptionStatus.ACTIVE
+        ? `Gói Solo đang hoạt động — còn ${daysLeft} ngày`
+        : status === SubscriptionStatus.EXPIRED
+          ? 'Gói đã hết hạn'
+          : 'Trạng thái gói BOBAPOS';
+
+  return (
+    <section className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white p-5">
+      <h2 className="font-bold text-stone-900">Gói BOBAPOS Solo</h2>
+      <p className="mt-1 text-sm text-stone-600">{label}</p>
+      <p className="mt-2 text-xs text-stone-500">
+        Mỗi lần thanh toán gia hạn thêm 30 ngày. Thanh toán qua chuyển khoản / VietQR (SePay tự xác
+        nhận).
+      </p>
+      <Link
+        href={SOLO_BILLING_PATH}
+        className={`mt-4 inline-block rounded-xl px-5 py-2.5 text-sm font-bold text-white ${BRAND.primary}`}
+      >
+        {status === SubscriptionStatus.EXPIRED ? 'Gia hạn ngay' : 'Xem & gia hạn gói'}
+      </Link>
+    </section>
+  );
+}
+
 function ShopTab({
   storeName,
   tenant,
@@ -1349,6 +1396,8 @@ function ShopTab({
 }) {
   return (
     <div className="space-y-6">
+      <SoloSubscriptionSection />
+
       <section className="rounded-2xl border border-stone-200 bg-white p-5">
         <h2 className="font-bold text-stone-900">Quản lý kho & trừ NVL</h2>
         <p className="mt-1 text-sm text-stone-500">

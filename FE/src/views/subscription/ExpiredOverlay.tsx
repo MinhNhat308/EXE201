@@ -3,18 +3,27 @@
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 import { BRAND } from '@/lib/brand';
-import { getSubscriptionStatus, isSubscriptionExpired, getStoredUser } from '@/lib/auth-storage';
+import {
+  getStoredTenant,
+  getStoredUser,
+  getSubscriptionStatus,
+  isSubscriptionExpired,
+} from '@/lib/auth-storage';
+import { getBillingPath } from '@/lib/workspace-routes';
+import { TenantInfo } from '@/models/tenant.model';
 import { Role } from '@/models/user.model';
 
 export function ExpiredOverlay() {
   const [expired, setExpired] = useState(false);
   const [isAdmin, setIsAdmin] = useState(false);
+  const [billingPath, setBillingPath] = useState('/dashboard/admin/billing');
 
   useEffect(() => {
     const applyLocal = () => {
       setExpired(isSubscriptionExpired());
       const user = getStoredUser<{ role: Role }>();
       setIsAdmin(user?.role === Role.ADMIN);
+      setBillingPath(getBillingPath(getStoredTenant<TenantInfo>()));
     };
     applyLocal();
     const id = window.setInterval(applyLocal, 30_000);
@@ -35,7 +44,7 @@ export function ExpiredOverlay() {
         </p>
         {isAdmin && (
           <Link
-            href="/dashboard/admin/billing"
+            href={billingPath}
             className={`mt-4 inline-block rounded-xl px-5 py-2.5 text-sm font-semibold text-white ${BRAND.primary}`}
           >
             Thanh toán & gia hạn
