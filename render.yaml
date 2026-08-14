@@ -7,7 +7,7 @@ services:
     region: singapore
     plan: free
     rootDir: BE
-    buildCommand: npm install && npm run build
+    buildCommand: npm install --include=dev && npm run build
     startCommand: npm run start:prod
     healthCheckPath: /api/health
     envVars:
