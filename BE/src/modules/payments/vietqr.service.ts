@@ -114,7 +114,9 @@ export class VietQrService {
       addInfo: paymentCode,
       accountName,
     });
-    const qrImageUrl = `https://img.vietqr.io/image/${acqId}-${accountNo}-compact2.jpg?${params}`;
+    const template =
+      process.env.VIETQR_IMG_TEMPLATE?.trim() || 'tDT6Bww';
+    const qrImageUrl = `https://api.vietqr.io/image/${acqId}-${accountNo}-${template}.jpg?${params}`;
 
     return {
       qrImageUrl,
