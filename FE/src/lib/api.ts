@@ -12,7 +12,9 @@ function resolveApiUrl() {
 }
 
 const API_URL = resolveApiUrl();
-const DEFAULT_FETCH_TIMEOUT_MS = 20_000;
+/** Local dev: 20s. Production (Render free cold start): 60s */
+const DEFAULT_FETCH_TIMEOUT_MS =
+  process.env.NODE_ENV === 'production' || process.env.VERCEL ? 60_000 : 20_000;
 
 export class ApiError extends Error {
   constructor(
@@ -105,8 +107,11 @@ async function executeRequest<T>(
     });
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
+      const isProd = process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
       throw new ApiError(
-        'Máy chủ không phản hồi (quá 20 giây). Hãy kiểm tra Backend: cd BE → npm run start:dev (port 3001).',
+        isProd
+          ? 'Máy chủ đang khởi động (Render free tier ngủ sau 15 phút không dùng). Thử lại sau 30–60 giây.'
+          : 'Máy chủ không phản hồi (quá 20 giây). Hãy kiểm tra Backend: cd BE → npm run start:dev (port 3001).',
         0,
       );
     }
